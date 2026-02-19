@@ -1,213 +1,204 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 Health Surveillance System</title>
+<title>PM2.5 Thailand Dashboard</title>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{
+body {
+    font-family: 'Prompt', sans-serif;
     margin:0;
-    font-family:Arial;
+    background:#f4f6f9;
+}
+
+header {
+    background:#0d6efd;
+    color:white;
+    padding:15px;
     text-align:center;
+    font-size:20px;
+}
+
+#map {
+    height:400px;
+}
+
+.container {
     padding:20px;
-    transition:background 0.5s;
-    color:white;
 }
-.container{
-    max-width:500px;
-    margin:auto;
-}
-.card{
-    background:white;
-    color:black;
-    padding:20px;
-    border-radius:20px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.3);
-}
-button{
-    padding:8px 15px;
-    margin:5px;
-    border:none;
-    border-radius:10px;
-    background:#2980b9;
-    color:white;
-    font-size:14px;
-}
-canvas{
+
+table {
+    width:100%;
+    border-collapse: collapse;
     margin-top:20px;
 }
-.small{
-    font-size:12px;
+
+th, td {
+    padding:10px;
+    border:1px solid #ddd;
+    text-align:center;
+}
+
+th {
+    background:#0d6efd;
+    color:white;
+}
+
+.level-good { background:#4CAF50; color:white; }
+.level-moderate { background:#FFC107; }
+.level-unhealthy { background:#FF5722; color:white; }
+.level-very { background:#B71C1C; color:white; }
+
+#advice {
+    margin-top:20px;
+    padding:15px;
+    background:white;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.1);
 }
 </style>
 </head>
+
 <body>
+
+<header>
+รายงานสถานการณ์ PM2.5 ประเทศไทย (Real-time)
+</header>
+
+<div id="map"></div>
 
 <div class="container">
 
-<h2>🌫 ระบบเฝ้าระวัง PM2.5</h2>
+<canvas id="pmChart"></canvas>
 
-<div class="card">
-
-<div id="location">กำลังตรวจสอบตำแหน่ง...</div>
-<div id="result">กำลังโหลดข้อมูล...</div>
-
-<button onclick="init()">รีเฟรช</button>
-<button onclick="exportCSV()">Export CSV</button>
-
-<canvas id="chart"></canvas>
-
-<div class="small">
-เกณฑ์มาตรฐานประเทศไทย (24 ชม.) = 50 µg/m³
+<div id="advice">
+<h3>คำแนะนำด้านสุขภาพ (ตามกรมอนามัย)</h3>
+<p id="adviceText">กำลังโหลดข้อมูล...</p>
 </div>
 
-</div>
+<table id="pmTable">
+<thead>
+<tr>
+<th>จังหวัด</th>
+<th>PM2.5 (µg/m³)</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 
 </div>
 
 <script>
-const apiKey="05dc64914ef2d1b7c4d2678a15450338e660ea53";
-const THAI_STANDARD=50;
-let chart;
-let historyData=[];
 
-function getAdvice(pm){
-    if(pm<=25){
-        return {
-            color:"#2ecc71",
-            level:"อากาศดี",
-            advice:"ประชาชนทั่วไปสามารถทำกิจกรรมกลางแจ้งได้"
-        };
-    }
-    if(pm<=50){
-        return {
-            color:"#f1c40f",
-            level:"เริ่มมีผลกระทบ",
-            advice:"กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้ง"
-        };
-    }
-    if(pm<=90){
-        return {
-            color:"#e67e22",
-            level:"มีผลกระทบต่อสุขภาพ",
-            advice:"ควรสวมหน้ากาก N95 และหลีกเลี่ยงกิจกรรมกลางแจ้ง"
-        };
-    }
-    return {
-        color:"#e74c3c",
-        level:"อันตรายต่อสุขภาพ",
-        advice:"ทุกกลุ่มควรอยู่ภายในอาคาร ใช้เครื่องฟอกอากาศ และหลีกเลี่ยงกิจกรรมกลางแจ้ง"
-    };
+// ====================== MAP =========================
+const map = L.map('map').setView([13.736717, 100.523186], 6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// ====================== API =========================
+// *** ตัวอย่าง API JSON ต้องเปลี่ยนเป็นของจริง ***
+const API_URL = "https://pm25.gistda.or.th/json/pm25_all.json";
+
+fetch(API_URL)
+.then(res => res.json())
+.then(data => {
+
+    const tableBody = document.querySelector("#pmTable tbody");
+    const labels = [];
+    const values = [];
+
+    data.sort((a,b)=> b.pm25 - a.pm25);
+
+    data.forEach(loc => {
+
+        // ----- Map -----
+        let color = getColor(loc.pm25);
+
+        L.circle([loc.lat, loc.lon], {
+            color: color,
+            radius: 8000
+        }).addTo(map)
+        .bindPopup(`<b>${loc.province}</b><br>PM2.5: ${loc.pm25}`);
+
+        // ----- Table -----
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${loc.province}</td>
+            <td>${loc.pm25}</td>
+        `;
+        tableBody.appendChild(row);
+
+        labels.push(loc.province);
+        values.push(loc.pm25);
+    });
+
+    createChart(labels.slice(0,15), values.slice(0,15));
+    showAdvice(values[0]);
+    sendNotification(values[0]);
+
+});
+
+// ====================== COLOR LEVEL =========================
+function getColor(pm){
+    if(pm <= 25) return "#4CAF50";
+    if(pm <= 50) return "#FFC107";
+    if(pm <= 75) return "#FF5722";
+    return "#B71C1C";
 }
 
-async function fetchPM(lat,lon){
-    const url=`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${apiKey}`;
-    const response=await fetch(url);
-    const data=await response.json();
-    if(data.status!=="ok") return;
-
-    const pm=data.data.iaqi.pm25?.v || 0;
-    const station=data.data.city.name;
-
-    const info=getAdvice(pm);
-
-    document.body.style.background=info.color;
-
-    document.getElementById("location").innerHTML=
-        `<strong>สถานี:</strong> ${station}`;
-
-    document.getElementById("result").innerHTML=`
-        <h1>${pm} µg/m³</h1>
-        <h3>${info.level}</h3>
-        <p>${info.advice}</p>
-    `;
-
-    if(pm>THAI_STANDARD){
-        notify(pm);
-    }
-
-    saveHistory(pm);
-    updateChart();
-}
-
-function saveHistory(value){
-    const time=new Date().toLocaleTimeString();
-    historyData.push({time,value});
-    if(historyData.length>10){
-        historyData.shift();
-    }
-}
-
-function updateChart(){
-    const ctx=document.getElementById("chart");
-
-    if(chart) chart.destroy();
-
-    chart=new Chart(ctx,{
-        type:'line',
-        data:{
-            labels:historyData.map(d=>d.time),
-            datasets:[
-                {
-                    label:'PM2.5',
-                    data:historyData.map(d=>d.value),
-                    borderColor:'#2980b9',
-                    fill:false
-                },
-                {
-                    label:'เกณฑ์มาตรฐานไทย',
-                    data:Array(historyData.length).fill(THAI_STANDARD),
-                    borderColor:'#e74c3c',
-                    borderDash:[5,5],
-                    fill:false
-                }
-            ]
-        },
-        options:{
-            scales:{
-                y:{beginAtZero:true}
-            }
+// ====================== CHART =========================
+function createChart(labels, data){
+    new Chart(document.getElementById("pmChart"), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'PM2.5 µg/m³',
+                data: data
+            }]
         }
     });
 }
 
-function notify(value){
-    if(Notification.permission==="granted"){
-        new Notification("แจ้งเตือน PM2.5 สูง",{
-            body:`ค่าฝุ่น ${value} µg/m³ เกินเกณฑ์มาตรฐาน`
-        });
+// ====================== HEALTH ADVICE =========================
+function showAdvice(pm){
+    let text = "";
+
+    if(pm <= 25){
+        text = "คุณภาพอากาศดี สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
+    } else if(pm <= 50){
+        text = "เริ่มมีผลกระทบต่อสุขภาพ กลุ่มเสี่ยงควรลดเวลาทำกิจกรรมกลางแจ้ง";
+    } else if(pm <= 75){
+        text = "ควรสวมหน้ากาก N95 และหลีกเลี่ยงกิจกรรมกลางแจ้ง";
+    } else {
+        text = "อันตรายต่อสุขภาพ ควรอยู่ภายในอาคาร ปิดประตูหน้าต่าง ใช้เครื่องฟอกอากาศ";
     }
+
+    document.getElementById("adviceText").innerText = text;
 }
 
-function exportCSV(){
-    let csv="Time,PM2.5\n";
-    historyData.forEach(d=>{
-        csv+=`${d.time},${d.value}\n`;
+// ====================== NOTIFICATION =========================
+function sendNotification(pm){
+
+    if (!("Notification" in window)) return;
+
+    Notification.requestPermission().then(permission => {
+        if(permission === "granted" && pm > 75){
+            new Notification("แจ้งเตือน PM2.5 สูง!", {
+                body: "ระดับฝุ่นเกินมาตรฐาน โปรดสวมหน้ากาก N95",
+            });
+        }
     });
 
-    const blob=new Blob([csv],{type:'text/csv'});
-    const link=document.createElement("a");
-    link.href=URL.createObjectURL(blob);
-    link.download="pm25_history.csv";
-    link.click();
 }
 
-function init(){
-    if("Notification" in window){
-        Notification.requestPermission();
-    }
-
-    if("geolocation" in navigator){
-        navigator.geolocation.getCurrentPosition(pos=>{
-            fetchPM(pos.coords.latitude,pos.coords.longitude);
-        });
-    }
-}
-
-init();
 </script>
 
 </body>
