@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>ตรวจสอบค่า PM2.5</title>
+    <style>
+        body { font-family: Arial; text-align: center; margin-top: 50px; }
+        .box { padding:20px; border-radius:10px; display:inline-block; }
+    </style>
+</head>
+<body>
+
+<h2>🌫 ตรวจสอบค่า PM2.5 แบบเรียลไทม์</h2>
+<div class="box" id="result">กำลังโหลดข้อมูล...</div>
+
+<script>
+async function getPM25() {
+    const apiKey = 05dc64914ef2d1b7c4d2678a15450338e660ea53;
+    const city = "Bangkok";
+    const url = `https://api.waqi.info/feed/${city}/?token=${apiKey}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    const pm25 = data.data.iaqi.pm25.v;
+    
+    document.getElementById("result").innerHTML = 
+        `<h3>กรุงเทพฯ</h3>
+         <p>ค่า PM2.5 = ${pm25} µg/m³</p>`;
+}
+
+getPM25();
+</script>
+
+</body>
+</html>
