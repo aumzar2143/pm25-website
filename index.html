@@ -2,15 +2,16 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Healthy Air Happy Life</title>
+<title>PM2.5 Smart Monitor</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
 body{
+    margin:0;
     font-family: Arial, sans-serif;
-    background: linear-gradient(to bottom, #4facfe, #00f2fe);
     text-align:center;
     color:white;
-    margin:0;
+    transition: background 0.5s;
     padding:20px;
 }
 .card{
@@ -18,92 +19,116 @@ body{
     color:black;
     padding:25px;
     border-radius:20px;
-    box-shadow:0 8px 20px rgba(0,0,0,0.2);
-    max-width:350px;
+    max-width:400px;
     margin:auto;
-}
-select, button{
-    padding:10px;
-    margin:10px 0;
-    border-radius:10px;
-    border:none;
-    font-size:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.3);
 }
 button{
-    background:#4facfe;
-    color:white;
+    padding:10px 15px;
+    border:none;
+    border-radius:10px;
+    font-size:16px;
+    margin-top:10px;
     cursor:pointer;
-}
-.level{
-    font-size:18px;
-    font-weight:bold;
 }
 </style>
 </head>
 <body>
 
-<h2>🌫 Healthy Air Happy Life</h2>
+<h2>🌫 ระบบตรวจสอบ PM2.5 อัตโนมัติ</h2>
 
 <div class="card">
-    <select id="city">
-        <option value="bangkok">กรุงเทพฯ</option>
-        <option value="chiang-mai">เชียงใหม่</option>
-        <option value="khon-kaen">ขอนแก่น</option>
-        <option value="phuket">ภูเก็ต</option>
-    </select>
-
+    <div id="location">กำลังตรวจสอบพิกัด...</div>
     <div id="result">กำลังโหลดข้อมูล...</div>
-
-    <button onclick="getPM25()">🔄 รีเฟรชข้อมูล</button>
+    <button onclick="init()">🔄 รีเฟรช</button>
 </div>
 
 <script>
-async function getPM25(){
+const apiKey = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
+
+async function getPM25(lat, lon){
     try{
-        const apiKey="05dc64914ef2d1b7c4d2678a15450338e660ea53";
-        const city=document.getElementById("city").value;
-        const url=`https://api.waqi.info/feed/${city}/?token=${apiKey}`;
+        const url = `https://api.waqi.info/feed/geo:${lat};${lon}/?token=${apiKey}`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-        const response=await fetch(url);
-        const data=await response.json();
-        if(data.status!=="ok") throw new Error("API error");
+        if(data.status !== "ok") throw new Error("API error");
 
-        const pm25=data.data.iaqi.pm25.v;
+        const pm25 = data.data.iaqi.pm25?.v || 0;
+        const city = data.data.city.name;
 
-        let level="ดี 😊";
-        let advice="สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
-        let color="green";
+        let level = "";
+        let advice = "";
+        let bgColor = "";
 
-        if(pm25>25){
+        if(pm25 <= 25){
+            level="อากาศดี 😊";
+            advice="สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
+            bgColor="#2ecc71";
+        }
+        else if(pm25 <= 50){
             level="ปานกลาง 😐";
             advice="ควรหลีกเลี่ยงกิจกรรมกลางแจ้งเป็นเวลานาน";
-            color="orange";
+            bgColor="#f1c40f";
         }
-        if(pm25>50){
+        else if(pm25 <= 90){
             level="เริ่มมีผลกระทบ 😷";
-            advice="ควรสวมหน้ากาก และลดกิจกรรมกลางแจ้ง";
-            color="orangered";
+            advice="ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง";
+            bgColor="#e67e22";
         }
-        if(pm25>90){
+        else{
             level="อันตราย 🚨";
-            advice="ควรอยู่ในอาคาร ปิดประตูหน้าต่าง";
-            color="red";
+            advice="ควรอยู่ในอาคาร ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศ";
+            bgColor="#e74c3c";
+
+            sendNotification(pm25);
         }
 
-        document.getElementById("result").innerHTML=`
-            <h3>ค่า PM2.5</h3>
-            <h1 style="color:${color}">${pm25} µg/m³</h1>
-            <div class="level" style="color:${color}">${level}</div>
-            <p>${advice}</p>
-        `;
-    }
-    catch(error){
-        document.getElementById("result").innerHTML=
-        `<p style="color:red;">โหลดข้อมูลไม่สำเร็จ ❌</p>`;
+        document.body.style.background = bgColor;
+
+        document.getElementById("location").innerHTML =
+            `<strong>พื้นที่:</strong> ${city}`;
+
+        document.getElementById("result").innerHTML =
+            `<h1>${pm25} µg/m³</h1>
+             <h3>${level}</h3>
+             <p>${advice}</p>`;
+
+    }catch(error){
+        document.getElementById("result").innerHTML =
+            `<p style="color:red;">ไม่สามารถโหลดข้อมูลได้ ❌</p>`;
     }
 }
 
-getPM25();
+function sendNotification(value){
+    if(Notification.permission === "granted"){
+        new Notification("⚠️ PM2.5 สูง!",{
+            body:`ค่าฝุ่นปัจจุบัน ${value} µg/m³ โปรดป้องกันตนเอง`,
+        });
+    }
+}
+
+function init(){
+    if("geolocation" in navigator){
+        navigator.geolocation.getCurrentPosition(position=>{
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            getPM25(lat, lon);
+        },()=>{
+            document.getElementById("location").innerHTML =
+                "ไม่สามารถเข้าถึงพิกัดได้";
+        });
+    }else{
+        document.getElementById("location").innerHTML =
+            "อุปกรณ์ไม่รองรับ GPS";
+    }
+
+    if("Notification" in window){
+        Notification.requestPermission();
+    }
+}
+
+init();
 </script>
 
 </body>
