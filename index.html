@@ -3,42 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Healthy Air Smart Monitor</title>
+<title>PM2.5 Health Surveillance System</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{
     margin:0;
-    font-family: Arial, sans-serif;
+    font-family:Arial;
     text-align:center;
-    transition: background 0.5s;
-    color:white;
     padding:20px;
+    transition:background 0.5s;
+    color:white;
 }
 .container{
-    max-width:420px;
+    max-width:500px;
     margin:auto;
 }
 .card{
     background:white;
     color:black;
-    padding:25px;
+    padding:20px;
     border-radius:20px;
     box-shadow:0 10px 30px rgba(0,0,0,0.3);
 }
-input,button{
-    padding:10px;
-    margin:8px;
-    border-radius:10px;
-    border:none;
-    font-size:16px;
-}
 button{
-    background:#3498db;
+    padding:8px 15px;
+    margin:5px;
+    border:none;
+    border-radius:10px;
+    background:#2980b9;
     color:white;
-    cursor:pointer;
+    font-size:14px;
 }
-.footer{
-    margin-top:15px;
+canvas{
+    margin-top:20px;
+}
+.small{
     font-size:12px;
 }
 </style>
@@ -46,78 +47,72 @@ button{
 <body>
 
 <div class="container">
-<h2>🌫 Healthy Air Smart Monitor</h2>
+
+<h2>🌫 ระบบเฝ้าระวัง PM2.5</h2>
 
 <div class="card">
 
 <div id="location">กำลังตรวจสอบตำแหน่ง...</div>
-
-<input type="text" id="cityInput" placeholder="ค้นหาจังหวัด เช่น Bangkok">
-<br>
-<button onclick="searchCity()">🔍 ค้นหา</button>
-<button onclick="init()">📍 ใช้ตำแหน่งปัจจุบัน</button>
-
 <div id="result">กำลังโหลดข้อมูล...</div>
-<button onclick="refreshData()">🔄 รีเฟรช</button>
 
+<button onclick="init()">รีเฟรช</button>
+<button onclick="exportCSV()">Export CSV</button>
+
+<canvas id="chart"></canvas>
+
+<div class="small">
+เกณฑ์มาตรฐานประเทศไทย (24 ชม.) = 50 µg/m³
 </div>
 
-<div class="footer">
-Data source: WAQI API
 </div>
 
 </div>
 
 <script>
 const apiKey="05dc64914ef2d1b7c4d2678a15450338e660ea53";
-let currentLat=null;
-let currentLon=null;
-let currentCity=null;
+const THAI_STANDARD=50;
+let chart;
+let historyData=[];
 
-async function fetchData(url){
+function getAdvice(pm){
+    if(pm<=25){
+        return {
+            color:"#2ecc71",
+            level:"อากาศดี",
+            advice:"ประชาชนทั่วไปสามารถทำกิจกรรมกลางแจ้งได้"
+        };
+    }
+    if(pm<=50){
+        return {
+            color:"#f1c40f",
+            level:"เริ่มมีผลกระทบ",
+            advice:"กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้ง"
+        };
+    }
+    if(pm<=90){
+        return {
+            color:"#e67e22",
+            level:"มีผลกระทบต่อสุขภาพ",
+            advice:"ควรสวมหน้ากาก N95 และหลีกเลี่ยงกิจกรรมกลางแจ้ง"
+        };
+    }
+    return {
+        color:"#e74c3c",
+        level:"อันตรายต่อสุขภาพ",
+        advice:"ทุกกลุ่มควรอยู่ภายในอาคาร ใช้เครื่องฟอกอากาศ และหลีกเลี่ยงกิจกรรมกลางแจ้ง"
+    };
+}
+
+async function fetchPM(lat,lon){
+    const url=`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${apiKey}`;
     const response=await fetch(url);
     const data=await response.json();
-    if(data.status!=="ok") throw new Error("API error");
-    return data;
-}
+    if(data.status!=="ok") return;
 
-function getLevel(pm25){
-    if(pm25<=25) return {
-        level:"ดีมาก 😊",
-        color:"#2ecc71",
-        advice:"สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ"
-    };
-    if(pm25<=50) return {
-        level:"ปานกลาง 😐",
-        color:"#f1c40f",
-        advice:"ควรหลีกเลี่ยงกิจกรรมกลางแจ้งเป็นเวลานาน"
-    };
-    if(pm25<=90) return {
-        level:"เริ่มมีผลกระทบ 😷",
-        color:"#e67e22",
-        advice:"ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง"
-    };
-    return {
-        level:"อันตราย 🚨",
-        color:"#e74c3c",
-        advice:"ควรอยู่ในอาคาร ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศ"
-    };
-}
-
-function notifyUser(pm25){
-    if(Notification.permission==="granted"){
-        new Notification("⚠️ แจ้งเตือน PM2.5 สูง",{
-            body:`ค่าฝุ่น ${pm25} µg/m³ โปรดป้องกันตนเอง`
-        });
-    }
-}
-
-function display(data){
-    const pm25=data.data.iaqi.pm25?.v || 0;
-    const aqi=data.data.aqi;
+    const pm=data.data.iaqi.pm25?.v || 0;
     const station=data.data.city.name;
 
-    const info=getLevel(pm25);
+    const info=getAdvice(pm);
 
     document.body.style.background=info.color;
 
@@ -125,36 +120,79 @@ function display(data){
         `<strong>สถานี:</strong> ${station}`;
 
     document.getElementById("result").innerHTML=`
-        <h1>${pm25} µg/m³</h1>
-        <h3>AQI: ${aqi}</h3>
+        <h1>${pm} µg/m³</h1>
         <h3>${info.level}</h3>
         <p>${info.advice}</p>
     `;
 
-    if(pm25>90) notifyUser(pm25);
-}
-
-async function getByGeo(lat,lon){
-    const url=`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${apiKey}`;
-    const data=await fetchData(url);
-    display(data);
-}
-
-async function searchCity(){
-    const city=document.getElementById("cityInput").value;
-    if(!city) return;
-    currentCity=city;
-    const url=`https://api.waqi.info/feed/${city}/?token=${apiKey}`;
-    const data=await fetchData(url);
-    display(data);
-}
-
-function refreshData(){
-    if(currentLat && currentLon){
-        getByGeo(currentLat,currentLon);
-    }else if(currentCity){
-        searchCity();
+    if(pm>THAI_STANDARD){
+        notify(pm);
     }
+
+    saveHistory(pm);
+    updateChart();
+}
+
+function saveHistory(value){
+    const time=new Date().toLocaleTimeString();
+    historyData.push({time,value});
+    if(historyData.length>10){
+        historyData.shift();
+    }
+}
+
+function updateChart(){
+    const ctx=document.getElementById("chart");
+
+    if(chart) chart.destroy();
+
+    chart=new Chart(ctx,{
+        type:'line',
+        data:{
+            labels:historyData.map(d=>d.time),
+            datasets:[
+                {
+                    label:'PM2.5',
+                    data:historyData.map(d=>d.value),
+                    borderColor:'#2980b9',
+                    fill:false
+                },
+                {
+                    label:'เกณฑ์มาตรฐานไทย',
+                    data:Array(historyData.length).fill(THAI_STANDARD),
+                    borderColor:'#e74c3c',
+                    borderDash:[5,5],
+                    fill:false
+                }
+            ]
+        },
+        options:{
+            scales:{
+                y:{beginAtZero:true}
+            }
+        }
+    });
+}
+
+function notify(value){
+    if(Notification.permission==="granted"){
+        new Notification("แจ้งเตือน PM2.5 สูง",{
+            body:`ค่าฝุ่น ${value} µg/m³ เกินเกณฑ์มาตรฐาน`
+        });
+    }
+}
+
+function exportCSV(){
+    let csv="Time,PM2.5\n";
+    historyData.forEach(d=>{
+        csv+=`${d.time},${d.value}\n`;
+    });
+
+    const blob=new Blob([csv],{type:'text/csv'});
+    const link=document.createElement("a");
+    link.href=URL.createObjectURL(blob);
+    link.download="pm25_history.csv";
+    link.click();
 }
 
 function init(){
@@ -164,12 +202,7 @@ function init(){
 
     if("geolocation" in navigator){
         navigator.geolocation.getCurrentPosition(pos=>{
-            currentLat=pos.coords.latitude;
-            currentLon=pos.coords.longitude;
-            getByGeo(currentLat,currentLon);
-        },()=>{
-            document.getElementById("location").innerHTML=
-                "ไม่สามารถเข้าถึงตำแหน่งได้";
+            fetchPM(pos.coords.latitude,pos.coords.longitude);
         });
     }
 }
