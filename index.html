@@ -2,129 +2,175 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>PM2.5 Smart Monitor</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Healthy Air Smart Monitor</title>
 
 <style>
 body{
     margin:0;
     font-family: Arial, sans-serif;
     text-align:center;
-    color:white;
     transition: background 0.5s;
+    color:white;
     padding:20px;
+}
+.container{
+    max-width:420px;
+    margin:auto;
 }
 .card{
     background:white;
     color:black;
     padding:25px;
     border-radius:20px;
-    max-width:400px;
-    margin:auto;
-    box-shadow:0 10px 25px rgba(0,0,0,0.3);
+    box-shadow:0 10px 30px rgba(0,0,0,0.3);
+}
+input,button{
+    padding:10px;
+    margin:8px;
+    border-radius:10px;
+    border:none;
+    font-size:16px;
 }
 button{
-    padding:10px 15px;
-    border:none;
-    border-radius:10px;
-    font-size:16px;
-    margin-top:10px;
+    background:#3498db;
+    color:white;
     cursor:pointer;
+}
+.footer{
+    margin-top:15px;
+    font-size:12px;
 }
 </style>
 </head>
 <body>
 
-<h2>🌫 ระบบตรวจสอบ PM2.5 อัตโนมัติ</h2>
+<div class="container">
+<h2>🌫 Healthy Air Smart Monitor</h2>
 
 <div class="card">
-    <div id="location">กำลังตรวจสอบพิกัด...</div>
-    <div id="result">กำลังโหลดข้อมูล...</div>
-    <button onclick="init()">🔄 รีเฟรช</button>
+
+<div id="location">กำลังตรวจสอบตำแหน่ง...</div>
+
+<input type="text" id="cityInput" placeholder="ค้นหาจังหวัด เช่น Bangkok">
+<br>
+<button onclick="searchCity()">🔍 ค้นหา</button>
+<button onclick="init()">📍 ใช้ตำแหน่งปัจจุบัน</button>
+
+<div id="result">กำลังโหลดข้อมูล...</div>
+<button onclick="refreshData()">🔄 รีเฟรช</button>
+
+</div>
+
+<div class="footer">
+Data source: WAQI API
+</div>
+
 </div>
 
 <script>
-const apiKey = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
+const apiKey="05dc64914ef2d1b7c4d2678a15450338e660ea53";
+let currentLat=null;
+let currentLon=null;
+let currentCity=null;
 
-async function getPM25(lat, lon){
-    try{
-        const url = `https://api.waqi.info/feed/geo:${lat};${lon}/?token=${apiKey}`;
-        const response = await fetch(url);
-        const data = await response.json();
+async function fetchData(url){
+    const response=await fetch(url);
+    const data=await response.json();
+    if(data.status!=="ok") throw new Error("API error");
+    return data;
+}
 
-        if(data.status !== "ok") throw new Error("API error");
+function getLevel(pm25){
+    if(pm25<=25) return {
+        level:"ดีมาก 😊",
+        color:"#2ecc71",
+        advice:"สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ"
+    };
+    if(pm25<=50) return {
+        level:"ปานกลาง 😐",
+        color:"#f1c40f",
+        advice:"ควรหลีกเลี่ยงกิจกรรมกลางแจ้งเป็นเวลานาน"
+    };
+    if(pm25<=90) return {
+        level:"เริ่มมีผลกระทบ 😷",
+        color:"#e67e22",
+        advice:"ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง"
+    };
+    return {
+        level:"อันตราย 🚨",
+        color:"#e74c3c",
+        advice:"ควรอยู่ในอาคาร ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศ"
+    };
+}
 
-        const pm25 = data.data.iaqi.pm25?.v || 0;
-        const city = data.data.city.name;
-
-        let level = "";
-        let advice = "";
-        let bgColor = "";
-
-        if(pm25 <= 25){
-            level="อากาศดี 😊";
-            advice="สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
-            bgColor="#2ecc71";
-        }
-        else if(pm25 <= 50){
-            level="ปานกลาง 😐";
-            advice="ควรหลีกเลี่ยงกิจกรรมกลางแจ้งเป็นเวลานาน";
-            bgColor="#f1c40f";
-        }
-        else if(pm25 <= 90){
-            level="เริ่มมีผลกระทบ 😷";
-            advice="ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง";
-            bgColor="#e67e22";
-        }
-        else{
-            level="อันตราย 🚨";
-            advice="ควรอยู่ในอาคาร ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศ";
-            bgColor="#e74c3c";
-
-            sendNotification(pm25);
-        }
-
-        document.body.style.background = bgColor;
-
-        document.getElementById("location").innerHTML =
-            `<strong>พื้นที่:</strong> ${city}`;
-
-        document.getElementById("result").innerHTML =
-            `<h1>${pm25} µg/m³</h1>
-             <h3>${level}</h3>
-             <p>${advice}</p>`;
-
-    }catch(error){
-        document.getElementById("result").innerHTML =
-            `<p style="color:red;">ไม่สามารถโหลดข้อมูลได้ ❌</p>`;
+function notifyUser(pm25){
+    if(Notification.permission==="granted"){
+        new Notification("⚠️ แจ้งเตือน PM2.5 สูง",{
+            body:`ค่าฝุ่น ${pm25} µg/m³ โปรดป้องกันตนเอง`
+        });
     }
 }
 
-function sendNotification(value){
-    if(Notification.permission === "granted"){
-        new Notification("⚠️ PM2.5 สูง!",{
-            body:`ค่าฝุ่นปัจจุบัน ${value} µg/m³ โปรดป้องกันตนเอง`,
-        });
+function display(data){
+    const pm25=data.data.iaqi.pm25?.v || 0;
+    const aqi=data.data.aqi;
+    const station=data.data.city.name;
+
+    const info=getLevel(pm25);
+
+    document.body.style.background=info.color;
+
+    document.getElementById("location").innerHTML=
+        `<strong>สถานี:</strong> ${station}`;
+
+    document.getElementById("result").innerHTML=`
+        <h1>${pm25} µg/m³</h1>
+        <h3>AQI: ${aqi}</h3>
+        <h3>${info.level}</h3>
+        <p>${info.advice}</p>
+    `;
+
+    if(pm25>90) notifyUser(pm25);
+}
+
+async function getByGeo(lat,lon){
+    const url=`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${apiKey}`;
+    const data=await fetchData(url);
+    display(data);
+}
+
+async function searchCity(){
+    const city=document.getElementById("cityInput").value;
+    if(!city) return;
+    currentCity=city;
+    const url=`https://api.waqi.info/feed/${city}/?token=${apiKey}`;
+    const data=await fetchData(url);
+    display(data);
+}
+
+function refreshData(){
+    if(currentLat && currentLon){
+        getByGeo(currentLat,currentLon);
+    }else if(currentCity){
+        searchCity();
     }
 }
 
 function init(){
-    if("geolocation" in navigator){
-        navigator.geolocation.getCurrentPosition(position=>{
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            getPM25(lat, lon);
-        },()=>{
-            document.getElementById("location").innerHTML =
-                "ไม่สามารถเข้าถึงพิกัดได้";
-        });
-    }else{
-        document.getElementById("location").innerHTML =
-            "อุปกรณ์ไม่รองรับ GPS";
-    }
-
     if("Notification" in window){
         Notification.requestPermission();
+    }
+
+    if("geolocation" in navigator){
+        navigator.geolocation.getCurrentPosition(pos=>{
+            currentLat=pos.coords.latitude;
+            currentLon=pos.coords.longitude;
+            getByGeo(currentLat,currentLon);
+        },()=>{
+            document.getElementById("location").innerHTML=
+                "ไม่สามารถเข้าถึงตำแหน่งได้";
+        });
     }
 }
 
