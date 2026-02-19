@@ -1,41 +1,105 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>ตรวจสอบค่า PM2.5</title>
-    <style>
-        body { font-family: Arial; text-align: center; margin-top: 50px; }
-        .box { padding:20px; border-radius:10px; display:inline-block; }
-    </style>
+<meta charset="UTF-8">
+<title>Healthy Air Happy Life</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{
+    font-family: Arial, sans-serif;
+    background: linear-gradient(to bottom, #4facfe, #00f2fe);
+    text-align:center;
+    color:white;
+    margin:0;
+    padding:20px;
+}
+.card{
+    background:white;
+    color:black;
+    padding:25px;
+    border-radius:20px;
+    box-shadow:0 8px 20px rgba(0,0,0,0.2);
+    max-width:350px;
+    margin:auto;
+}
+select, button{
+    padding:10px;
+    margin:10px 0;
+    border-radius:10px;
+    border:none;
+    font-size:16px;
+}
+button{
+    background:#4facfe;
+    color:white;
+    cursor:pointer;
+}
+.level{
+    font-size:18px;
+    font-weight:bold;
+}
+</style>
 </head>
 <body>
 
-<h2>🌫 ตรวจสอบค่า PM2.5 แบบเรียลไทม์</h2>
-<div class="box" id="result">กำลังโหลดข้อมูล...</div>
+<h2>🌫 Healthy Air Happy Life</h2>
+
+<div class="card">
+    <select id="city">
+        <option value="bangkok">กรุงเทพฯ</option>
+        <option value="chiang-mai">เชียงใหม่</option>
+        <option value="khon-kaen">ขอนแก่น</option>
+        <option value="phuket">ภูเก็ต</option>
+    </select>
+
+    <div id="result">กำลังโหลดข้อมูล...</div>
+
+    <button onclick="getPM25()">🔄 รีเฟรชข้อมูล</button>
+</div>
 
 <script>
-async function getPM25() {
-    try {
-        const apiKey = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
-        const city = "bangkok";
-        const url = `https://api.waqi.info/feed/${city}/?token=${apiKey}`;
+async function getPM25(){
+    try{
+        const apiKey="05dc64914ef2d1b7c4d2678a15450338e660ea53";
+        const city=document.getElementById("city").value;
+        const url=`https://api.waqi.info/feed/${city}/?token=${apiKey}`;
 
-        const response = await fetch(url);
-        const data = await response.json();
+        const response=await fetch(url);
+        const data=await response.json();
+        if(data.status!=="ok") throw new Error("API error");
 
-        if (data.status !== "ok") {
-            throw new Error("API Error");
+        const pm25=data.data.iaqi.pm25.v;
+
+        let level="ดี 😊";
+        let advice="สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
+        let color="green";
+
+        if(pm25>25){
+            level="ปานกลาง 😐";
+            advice="ควรหลีกเลี่ยงกิจกรรมกลางแจ้งเป็นเวลานาน";
+            color="orange";
+        }
+        if(pm25>50){
+            level="เริ่มมีผลกระทบ 😷";
+            advice="ควรสวมหน้ากาก และลดกิจกรรมกลางแจ้ง";
+            color="orangered";
+        }
+        if(pm25>90){
+            level="อันตราย 🚨";
+            advice="ควรอยู่ในอาคาร ปิดประตูหน้าต่าง";
+            color="red";
         }
 
-        const pm25 = data.data.iaqi.pm25.v;
-
-        document.getElementById("result").innerHTML = 
-            `<h3>กรุงเทพฯ</h3>
-             <p>ค่า PM2.5 = ${pm25} µg/m³</p>`;
-
-    } catch (error) {
-        document.getElementById("result").innerHTML =
-            `<p style="color:red;">โหลดข้อมูลไม่สำเร็จ ❌</p>`;
+        document.getElementById("result").innerHTML=`
+            <h3>ค่า PM2.5</h3>
+            <h1 style="color:${color}">${pm25} µg/m³</h1>
+            <div class="level" style="color:${color}">${level}</div>
+            <p>${advice}</p>
+        `;
+    }
+    catch(error){
+        document.getElementById("result").innerHTML=
+        `<p style="color:red;">โหลดข้อมูลไม่สำเร็จ ❌</p>`;
     }
 }
 
