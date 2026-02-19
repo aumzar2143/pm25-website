@@ -15,18 +15,28 @@
 
 <script>
 async function getPM25() {
-    const apiKey = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
-    const city = "Bangkok";
-    const url = `https://api.waqi.info/feed/${city}/?token=${apiKey}`;
-    
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    const pm25 = data.data.iaqi.pm25.v;
-    
-    document.getElementById("result").innerHTML = 
-        `<h3>กรุงเทพฯ</h3>
-         <p>ค่า PM2.5 = ${pm25} µg/m³</p>`;
+    try {
+        const apiKey = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
+        const city = "bangkok";
+        const url = `https://api.waqi.info/feed/${city}/?token=${apiKey}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.status !== "ok") {
+            throw new Error("API Error");
+        }
+
+        const pm25 = data.data.iaqi.pm25.v;
+
+        document.getElementById("result").innerHTML = 
+            `<h3>กรุงเทพฯ</h3>
+             <p>ค่า PM2.5 = ${pm25} µg/m³</p>`;
+
+    } catch (error) {
+        document.getElementById("result").innerHTML =
+            `<p style="color:red;">โหลดข้อมูลไม่สำเร็จ ❌</p>`;
+    }
 }
 
 getPM25();
