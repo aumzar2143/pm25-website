@@ -3,50 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Thailand PM2.5 Dashboard</title>
+<title>🌫 Thailand PM2.5 Dashboard</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{
     margin:0;
     font-family:'Prompt',sans-serif;
-    background:#f4f6f9;
+    background:linear-gradient(135deg,#1e3c72,#2a5298);
+    color:#333;
 }
 
 header{
-    background:linear-gradient(90deg,#0d6efd,#198754);
-    color:white;
-    padding:15px;
     text-align:center;
+    padding:20px;
     font-size:22px;
     font-weight:bold;
+    color:white;
 }
 
 .container{
-    padding:20px;
-}
-
-#map{
-    height:400px;
-    border-radius:10px;
-    margin-bottom:20px;
+    padding:15px;
 }
 
 .card{
     background:white;
-    padding:15px;
-    border-radius:10px;
-    box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    padding:18px;
+    border-radius:16px;
     margin-bottom:20px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.15);
 }
 
-select{
-    padding:8px;
-    border-radius:5px;
-    border:1px solid #ccc;
+h3{
+    margin-top:0;
+}
+
+#map{
+    height:350px;
+    border-radius:12px;
 }
 
 table{
@@ -54,23 +50,33 @@ table{
     border-collapse:collapse;
 }
 
-th,td{
+th{
+    background:linear-gradient(90deg,#4facfe,#00f2fe);
+    color:white;
+    padding:10px;
+}
+
+td{
     padding:8px;
-    border:1px solid #ddd;
+    border-bottom:1px solid #eee;
     text-align:center;
 }
 
-th{
-    background:#0d6efd;
-    color:white;
+.top1{background:#ffcccc;}
+.top2{background:#ffe0b3;}
+.top3{background:#fff3cd;}
+
+.loading{
+    animation:pulse 1.5s infinite;
+    background:#eee;
+    height:20px;
+    border-radius:5px;
 }
 
-.top10{
-    background:#ffdddd;
-}
-
-#adviceBox{
-    font-size:15px;
+@keyframes pulse{
+    0%{opacity:1}
+    50%{opacity:0.4}
+    100%{opacity:1}
 }
 </style>
 </head>
@@ -78,27 +84,14 @@ th{
 <body>
 
 <header>
-📊 Thailand PM2.5 Real-time Dashboard
+🌫 Thailand PM2.5 Dashboard 🇹🇭  
+<div style="font-size:14px;">อัปเดตล่าสุด: <span id="updateTime">...</span></div>
 </header>
 
 <div class="container">
 
-<div id="map"></div>
-
 <div class="card">
-<label>เลือกจังหวัด: </label>
-<select id="provinceSelect">
-<option value="all">-- แสดงทั้งหมด --</option>
-</select>
-</div>
-
-<div class="card">
-<h3>📈 กราฟ Top 10 จังหวัดค่าฝุ่นสูงสุด</h3>
-<canvas id="pmChart"></canvas>
-</div>
-
-<div class="card">
-<h3>🏆 Top 10 จังหวัดอันตราย</h3>
+<h3>🏆 Top 10 จังหวัดค่าฝุ่นสูงสุด</h3>
 <table>
 <thead>
 <tr>
@@ -107,166 +100,121 @@ th{
 <th>PM2.5 (µg/m³)</th>
 </tr>
 </thead>
-<tbody id="topTable"></tbody>
+<tbody id="topTable">
+<tr><td colspan="3"><div class="loading"></div></td></tr>
+</tbody>
 </table>
 </div>
 
-<div class="card" id="adviceBox">
+<div class="card">
+<h3>📊 กราฟ Top 10</h3>
+<canvas id="chart"></canvas>
+</div>
+
+<div class="card">
+<h3>🗺 แผนที่ประเทศไทย</h3>
+<div id="map"></div>
+</div>
+
+<div class="card">
 <h3>🩺 คำแนะนำสุขภาพ</h3>
-<p id="adviceText">กำลังโหลดข้อมูล...</p>
+<p id="advice">กำลังโหลดข้อมูล...</p>
 </div>
 
 </div>
 
 <script>
 
-// ======= ใส่ API จริงตรงนี้ =======
-const API_URL = "https://example.com/pm25.json"; // เปลี่ยนเป็น API จริง
+// ใส่ API จริง
+const API_URL="https://example.com/pm25.json";
 
-let map = L.map('map').setView([13.736717,100.523186],6);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    attribution:'© OpenStreetMap'
-}).addTo(map);
-
-let markers = [];
-let allData = [];
+let allData=[];
 let chart;
 
-// ======= ดึงข้อมูล =======
 fetch(API_URL)
 .then(res=>res.json())
 .then(data=>{
-    allData = data;
-    initDashboard(data);
+    allData=data.sort((a,b)=>b.pm25-a.pm25);
+    renderTop10();
+    renderChart();
+    showAdvice();
+    document.getElementById("updateTime").innerText=
+        new Date().toLocaleString();
+    loadMap(); // โหลดแผนที่ทีหลัง
 });
 
-// ======= เริ่มต้นระบบ =======
-function initDashboard(data){
-
-    data.sort((a,b)=>b.pm25-a.pm25);
-
-    populateDropdown(data);
-    renderMap(data);
-    renderTop10(data);
-    renderChart(data.slice(0,10));
-    showAdvice(data[0].pm25);
-    sendNotification(data[0].pm25);
-}
-
-// ======= Dropdown =======
-function populateDropdown(data){
-    const select = document.getElementById("provinceSelect");
-    data.forEach(item=>{
-        let option = document.createElement("option");
-        option.value = item.province;
-        option.textContent = item.province;
-        select.appendChild(option);
-    });
-
-    select.addEventListener("change",()=>{
-        if(select.value==="all"){
-            renderMap(allData);
-        }else{
-            let filtered = allData.filter(p=>p.province===select.value);
-            renderMap(filtered);
-            showAdvice(filtered[0].pm25);
-        }
-    });
-}
-
-// ======= Map =======
-function renderMap(data){
-
-    markers.forEach(m=>map.removeLayer(m));
-    markers=[];
-
-    data.forEach(loc=>{
-        let marker = L.circle([loc.lat,loc.lon],{
-            radius:8000,
-            color:getColor(loc.pm25)
-        }).addTo(map)
-        .bindPopup(`<b>${loc.province}</b><br>PM2.5: ${loc.pm25}`);
-        markers.push(marker);
-    });
-}
-
-// ======= Top 10 Table =======
-function renderTop10(data){
-
-    const tbody = document.getElementById("topTable");
+// ===== Top 10 =====
+function renderTop10(){
+    const tbody=document.getElementById("topTable");
     tbody.innerHTML="";
+    allData.slice(0,10).forEach((d,i)=>{
+        let rowClass="";
+        if(i===0) rowClass="top1";
+        else if(i===1) rowClass="top2";
+        else if(i===2) rowClass="top3";
 
-    data.slice(0,10).forEach((item,index)=>{
-        let row = `
-        <tr class="top10">
-            <td>${index+1}</td>
-            <td>${item.province}</td>
-            <td>${item.pm25}</td>
+        tbody.innerHTML+=`
+        <tr class="${rowClass}">
+        <td>${i+1}</td>
+        <td>${d.province}</td>
+        <td>${d.pm25}</td>
         </tr>`;
-        tbody.innerHTML+=row;
     });
 }
 
-// ======= Chart =======
-function renderChart(top10){
-
-    if(chart) chart.destroy();
-
-    chart = new Chart(document.getElementById("pmChart"),{
+// ===== Chart =====
+function renderChart(){
+    chart=new Chart(document.getElementById("chart"),{
         type:'bar',
         data:{
-            labels:top10.map(d=>d.province),
+            labels:allData.slice(0,10).map(d=>d.province),
             datasets:[{
                 label:'PM2.5 µg/m³',
-                data:top10.map(d=>d.pm25)
+                data:allData.slice(0,10).map(d=>d.pm25)
             }]
         }
     });
 }
 
-// ======= สีระดับ =======
-function getColor(pm){
-    if(pm<=25) return "#4CAF50";
-    if(pm<=50) return "#FFC107";
-    if(pm<=75) return "#FF5722";
-    return "#B71C1C";
-}
-
-// ======= คำแนะนำกรมอนามัย =======
-function showAdvice(pm){
-
+// ===== Advice =====
+function showAdvice(){
+    let pm=allData[0].pm25;
     let text="";
 
-    if(pm<=25){
-        text="อากาศดี สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
-    }
-    else if(pm<=50){
-        text="เริ่มมีผลกระทบต่อสุขภาพ กลุ่มเสี่ยงควรลดเวลาทำกิจกรรมกลางแจ้ง";
-    }
-    else if(pm<=75){
-        text="ควรสวมหน้ากาก N95 และหลีกเลี่ยงกิจกรรมกลางแจ้ง";
-    }
-    else{
-        text="อันตรายต่อสุขภาพ ควรอยู่ภายในอาคาร ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศ";
-    }
+    if(pm<=25) text="😊 อากาศดี ทำกิจกรรมกลางแจ้งได้";
+    else if(pm<=50) text="😷 กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้ง";
+    else if(pm<=75) text="⚠ ควรสวมหน้ากาก N95";
+    else text="🚨 อันตราย! ควรอยู่ในอาคารและใช้เครื่องฟอกอากาศ";
 
-    document.getElementById("adviceText").innerText=text;
+    document.getElementById("advice").innerText=text;
 }
 
-// ======= Notification =======
-function sendNotification(pm){
+// ===== Load Map Late =====
+function loadMap(){
+    const script=document.createElement("script");
+    script.src="https://unpkg.com/leaflet/dist/leaflet.js";
+    script.onload=initMap;
+    document.body.appendChild(script);
+}
 
-    if(!("Notification" in window)) return;
+function initMap(){
+    let map=L.map('map').setView([13.7367,100.5231],6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+    .addTo(map);
 
-    Notification.requestPermission().then(permission=>{
-        if(permission==="granted" && pm>75){
-            new Notification("⚠ PM2.5 สูง!",{
-                body:"ค่าฝุ่นเกินมาตรฐาน โปรดสวมหน้ากาก N95"
-            });
-        }
+    allData.forEach(d=>{
+        L.circle([d.lat,d.lon],{
+            radius:8000,
+            color:d.pm25>75?"red":"orange"
+        }).addTo(map)
+        .bindPopup(`${d.province} : ${d.pm25}`);
     });
 }
+
+// ===== Auto Refresh ทุก 5 นาที =====
+setInterval(()=>{
+    location.reload();
+},300000);
 
 </script>
 
