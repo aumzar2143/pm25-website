@@ -3,141 +3,176 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🇹🇭 Thailand PM2.5 Monitoring</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>PM2.5 Ultra Pro</title>
 
 <style>
 body{
-margin:0;
-font-family:'Prompt',sans-serif;
-background:#0f172a;
-color:white;
-}
-
-header{
-background:linear-gradient(90deg,#005bea,#00c6fb);
-padding:20px;
-text-align:center;
-font-size:22px;
-font-weight:bold;
+    margin:0;
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg,#FFD54F,#FFB300);
 }
 
 .container{
-padding:15px;
-max-width:1000px;
-margin:auto;
+    max-width:1000px;
+    margin:auto;
+    padding:20px;
 }
 
 .card{
-background:#1e293b;
-padding:18px;
-border-radius:15px;
-margin-bottom:20px;
+    background:white;
+    border-radius:20px;
+    padding:30px;
+    margin-bottom:20px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.2);
+    text-align:center;
 }
 
-.big{
-font-size:28px;
-font-weight:bold;
+h1{
+    margin:0;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
+.pm-value{
+    font-size:80px;
+    font-weight:bold;
+    margin:20px 0;
 }
 
-th{
-background:#0ea5e9;
-padding:10px;
+.status{
+    font-size:22px;
+    font-weight:600;
 }
 
-td{
-padding:8px;
-text-align:center;
-border-bottom:1px solid #334155;
+select,button{
+    padding:10px 15px;
+    font-size:16px;
+    border-radius:10px;
+    border:none;
+    margin:5px;
 }
+
+button{
+    cursor:pointer;
+    background:#FF7043;
+    color:white;
+    font-weight:bold;
+}
+
+button:hover{
+    opacity:0.8;
+}
+
+.table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+.table th,.table td{
+    padding:10px;
+    border-bottom:1px solid #eee;
+}
+
+.rank1{background:#ff5252;color:white;}
+.rank2{background:#ff7043;color:white;}
+.rank3{background:#ffa726;color:white;}
 </style>
 </head>
 
 <body>
 
-<header>
-🌫 Thailand PM2.5 Monitoring System
-<div style="font-size:14px" id="time"></div>
-</header>
-
 <div class="container">
 
 <div class="card">
-<div>📍 จังหวัดที่ตรวจ: <span id="province">กำลังโหลด...</span></div>
-<div class="big" id="pmValue">--</div>
+    <h1>🌫️ PM2.5 Real-Time Ultra Pro</h1>
+
+    <select id="provinceSelect">
+        <option value="lampang">ลำปาง</option>
+        <option value="chiangmai">เชียงใหม่</option>
+        <option value="bangkok">กรุงเทพฯ</option>
+        <option value="chiangrai">เชียงราย</option>
+    </select>
+
+    <button onclick="loadData()">🔄 โหลดข้อมูล</button>
+    <button onclick="resetData()">♻️ รีเซท</button>
+
+    <div class="pm-value" id="pmValue">--</div>
+    <div class="status" id="statusText">รอข้อมูล...</div>
 </div>
 
 <div class="card">
-<h3>📊 กราฟค่า PM2.5</h3>
-<canvas id="chart"></canvas>
-</div>
-
-<div class="card">
-<h3>🩺 คำแนะนำสุขภาพ</h3>
-<p id="advice"></p>
+    <h2>🏆 Top 10 จังหวัดอันตราย</h2>
+    <table class="table" id="rankingTable">
+        <thead>
+            <tr>
+                <th>อันดับ</th>
+                <th>จังหวัด</th>
+                <th>ค่า PM2.5</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
 </div>
 
 </div>
 
 <script>
 
-const token="demo"; // ใช้ demo ได้เลย
+// จำลองข้อมูล (ถ้าจะต่อ API จริงค่อยเปลี่ยนตรงนี้)
+const data = {
+    lampang: 100,
+    chiangmai: 145,
+    bangkok: 85,
+    chiangrai: 170
+};
 
-async function loadData(){
-    try{
-        const res=await fetch(`https://api.waqi.info/feed/bangkok/?token=${token}`);
-        const data=await res.json();
-
-        if(data.status!=="ok"){
-            document.getElementById("province").innerText="โหลดข้อมูลไม่ได้";
-            return;
-        }
-
-        const pm=data.data.iaqi.pm25.v;
-        const province=data.data.city.name;
-
-        document.getElementById("province").innerText=province;
-        document.getElementById("pmValue").innerText=pm+" µg/m³";
-        document.getElementById("time").innerText="อัปเดต: "+new Date().toLocaleString();
-
-        showAdvice(pm);
-        renderChart(pm);
-
-    }catch(e){
-        document.getElementById("province").innerText="เกิดข้อผิดพลาด API";
-    }
+function getStatus(pm){
+    if(pm <= 50) return "🟢 อากาศดีมาก";
+    if(pm <= 100) return "🟡 ปานกลาง";
+    if(pm <= 150) return "🟠 เริ่มมีผลกระทบ";
+    if(pm <= 200) return "🔴 อันตราย";
+    return "🟣 อันตรายมาก";
 }
 
-function renderChart(pm){
-    new Chart(document.getElementById("chart"),{
-        type:'bar',
-        data:{
-            labels:["PM2.5"],
-            datasets:[{
-                label:"µg/m³",
-                data:[pm],
-                backgroundColor:"#ef4444"
-            }]
-        }
+function loadData(){
+    const province = document.getElementById("provinceSelect").value;
+    const pm = data[province];
+
+    document.getElementById("pmValue").innerText = pm;
+    document.getElementById("statusText").innerText = getStatus(pm);
+
+    generateRanking();
+}
+
+function resetData(){
+    document.getElementById("pmValue").innerText = "--";
+    document.getElementById("statusText").innerText = "รีเซทแล้ว ♻️";
+    document.querySelector("#rankingTable tbody").innerHTML = "";
+}
+
+function generateRanking(){
+    const tbody = document.querySelector("#rankingTable tbody");
+    tbody.innerHTML = "";
+
+    const sorted = Object.entries(data)
+        .sort((a,b)=> b[1]-a[1]);
+
+    sorted.forEach((item,index)=>{
+        const row = document.createElement("tr");
+
+        if(index==0) row.classList.add("rank1");
+        if(index==1) row.classList.add("rank2");
+        if(index==2) row.classList.add("rank3");
+
+        row.innerHTML = `
+            <td>${index+1}</td>
+            <td>${item[0]}</td>
+            <td>${item[1]}</td>
+        `;
+        tbody.appendChild(row);
     });
 }
 
-function showAdvice(pm){
-    let text="";
-    if(pm<=25) text="😊 อากาศดี ทำกิจกรรมกลางแจ้งได้";
-    else if(pm<=50) text="😷 กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้ง";
-    else if(pm<=75) text="⚠ ควรสวมหน้ากาก N95";
-    else text="🚨 อันตราย! ควรอยู่ในอาคารและใช้เครื่องฟอกอากาศ";
-
-    document.getElementById("advice").innerText=text;
-}
-
-loadData();
+// โหลดทันทีตอนเปิดเว็บ
+window.onload = loadData;
 
 </script>
 
