@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 Thailand – Research Dashboard</title>
+<title>PM2.5 ประเทศไทย</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{
-font-family: 'Prompt', sans-serif;
+font-family: sans-serif;
 background: linear-gradient(135deg,#b31217,#e52d27);
 margin:0;
 padding:20px;
@@ -17,17 +17,16 @@ color:white;
 text-align:center;
 }
 .container{
-max-width:1000px;
+max-width:900px;
 margin:auto;
 }
 .card{
-background:rgba(0,0,0,0.75);
+background:rgba(0,0,0,0.85);
 padding:20px;
 border-radius:20px;
 margin-bottom:20px;
-box-shadow:0 10px 25px rgba(0,0,0,0.4);
 }
-select,button{
+button,select{
 padding:12px;
 border-radius:10px;
 border:none;
@@ -36,27 +35,16 @@ font-size:16px;
 }
 button{
 background:#ffcc00;
-cursor:pointer;
 font-weight:bold;
-}
-h1{
-margin-bottom:10px;
+cursor:pointer;
 }
 .aqi{
-font-size:70px;
+font-size:65px;
 font-weight:bold;
 }
-.level{
+.status{
 font-size:20px;
 margin-top:10px;
-}
-.top10{
-text-align:left;
-}
-.footer{
-margin-top:20px;
-font-size:14px;
-opacity:0.8;
 }
 </style>
 </head>
@@ -64,142 +52,74 @@ opacity:0.8;
 
 <div class="container">
 
-<h1>👑 PM2.5 ประเทศไทย – Research Dashboard</h1>
+<h1>👑 PM2.5 ประเทศไทย</h1>
 
 <div class="card">
-<button onclick="useGPS()">📍 ใช้ตำแหน่งของฉัน (GPS)</button>
-<select id="provinceSelect" onchange="loadData()">
-<option value="Bangkok">กรุงเทพมหานคร</option>
-<option value="Chiang Mai">เชียงใหม่</option>
-<option value="Chiang Rai">เชียงราย</option>
-<option value="Lampang">ลำปาง</option>
-<option value="Nan">น่าน</option>
-<option value="Phayao">พะเยา</option>
-<option value="Khon Kaen">ขอนแก่น</option>
-<option value="Nakhon Ratchasima">นครราชสีมา</option>
-<option value="Chon Buri">ชลบุรี</option>
-<option value="Rayong">ระยอง</option>
-<option value="Songkhla">สงขลา</option>
-<option value="Phuket">ภูเก็ต</option>
+<select id="province">
+<option value="bangkok">กรุงเทพมหานคร</option>
+<option value="chiang-mai">เชียงใหม่</option>
+<option value="chiang-rai">เชียงราย</option>
+<option value="lampang">ลำปาง</option>
+<option value="khon-kaen">ขอนแก่น</option>
+<option value="nakhon-ratchasima">นครราชสีมา</option>
+<option value="chon-buri">ชลบุรี</option>
+<option value="phuket">ภูเก็ต</option>
+<option value="songkhla">สงขลา</option>
 </select>
+<button onclick="loadData()">🔄 โหลดข้อมูล</button>
 </div>
 
 <div class="card">
-<div class="aqi" id="pmValue">--</div>
-<div>µg/m³</div>
-<div class="level" id="levelText"></div>
+<div class="aqi" id="value">--</div>
+<div class="status" id="status"></div>
 </div>
 
 <div class="card">
-<h2>📊 แนวโน้มย้อนหลัง 7 วัน</h2>
+<h3>📊 แนวโน้ม PM2.5</h3>
 <canvas id="chart"></canvas>
-</div>
-
-<div class="card">
-<h2>🔥 10 จังหวัดค่าฝุ่นสูงสุดวันนี้</h2>
-<div class="top10" id="top10"></div>
-</div>
-
-<div class="card">
-<h2>🛡 แนวทางป้องกันตามกรมอนามัย</h2>
-<div id="advice"></div>
-</div>
-
-<div class="footer">
-แหล่งข้อมูล: OpenAQ API | แนวทางอ้างอิงกรมอนามัย กระทรวงสาธารณสุข
 </div>
 
 </div>
 
 <script>
 
-const provinceMap = {
-"Bangkok":"กรุงเทพมหานคร",
-"Chiang Mai":"เชียงใหม่",
-"Chiang Rai":"เชียงราย",
-"Lampang":"ลำปาง",
-"Nan":"น่าน",
-"Phayao":"พะเยา",
-"Khon Kaen":"ขอนแก่น",
-"Nakhon Ratchasima":"นครราชสีมา",
-"Chon Buri":"ชลบุรี",
-"Rayong":"ระยอง",
-"Songkhla":"สงขลา",
-"Phuket":"ภูเก็ต"
-};
+const TOKEN = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
 
-function getLevel(pm){
-if(pm<=15) return "🟢 คุณภาพอากาศดี";
-if(pm<=37) return "🟡 ปานกลาง";
-if(pm<=50) return "🟠 เริ่มมีผลกระทบต่อสุขภาพ";
-if(pm<=90) return "🔴 มีผลกระทบต่อสุขภาพ";
+function getLevel(aqi){
+if(aqi<=50) return "🟢 คุณภาพอากาศดี";
+if(aqi<=100) return "🟡 ปานกลาง";
+if(aqi<=150) return "🟠 เริ่มมีผลกระทบต่อสุขภาพ";
+if(aqi<=200) return "🔴 มีผลกระทบต่อสุขภาพ";
 return "🟣 อันตรายมาก";
 }
 
-function getAdvice(pm){
-if(pm<=37)
-return "สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
-if(pm<=50)
-return "ควรลดระยะเวลาทำกิจกรรมกลางแจ้ง และสวมหน้ากากอนามัย";
-if(pm<=90)
-return "หลีกเลี่ยงกิจกรรมกลางแจ้ง สวมหน้ากาก N95 และปิดประตูหน้าต่าง";
-return "งดกิจกรรมกลางแจ้งโดยเด็ดขาด ใช้เครื่องฟอกอากาศ และติดตามประกาศราชการ";
-}
-
 async function loadData(){
-let province = document.getElementById("provinceSelect").value;
-let response = await fetch(`https://api.openaq.org/v2/latest?country=TH&city=${province}&parameter=pm25`);
-let data = await response.json();
+let province = document.getElementById("province").value;
+let res = await fetch(`https://api.waqi.info/feed/${province}/?token=${TOKEN}`);
+let data = await res.json();
 
-if(data.results.length>0){
-let pm = data.results[0].measurements[0].value;
-document.getElementById("pmValue").innerText = pm;
-document.getElementById("levelText").innerText = getLevel(pm);
-document.getElementById("advice").innerText = getAdvice(pm);
+if(data.status==="ok"){
+let aqi = data.data.aqi;
+document.getElementById("value").innerText = aqi;
+document.getElementById("status").innerText = getLevel(aqi);
+drawChart(data.data.forecast.daily.pm25);
 }else{
-document.getElementById("pmValue").innerText="ไม่มีข้อมูล";
+alert("โหลดข้อมูลไม่ได้ ตรวจสอบ TOKEN");
 }
-loadChart(province);
-loadTop10();
 }
 
-async function loadChart(province){
-let response = await fetch(`https://api.openaq.org/v2/measurements?country=TH&city=${province}&parameter=pm25&limit=7`);
-let data = await response.json();
-
-let labels=[];
-let values=[];
-data.results.reverse().forEach(d=>{
-labels.push(d.date.local.split("T")[0]);
-values.push(d.value);
-});
+function drawChart(forecast){
+let labels = forecast.map(d=>d.day);
+let values = forecast.map(d=>d.avg);
 
 new Chart(document.getElementById("chart"),{
 type:"line",
-data:{labels:labels,datasets:[{label:"PM2.5",data:values}]}
-});
-}
-
-async function loadTop10(){
-let response = await fetch(`https://api.openaq.org/v2/latest?country=TH&parameter=pm25&limit=10&order_by=value&sort=desc`);
-let data = await response.json();
-let html="";
-data.results.forEach((r,i)=>{
-html+=`${i+1}. ${provinceMap[r.city]||r.city} - ${r.measurements[0].value} µg/m³ <br>`;
-});
-document.getElementById("top10").innerHTML=html;
-}
-
-function useGPS(){
-navigator.geolocation.getCurrentPosition(async position=>{
-let lat=position.coords.latitude;
-let lon=position.coords.longitude;
-let response = await fetch(`https://api.openaq.org/v2/locations?coordinates=${lat},${lon}&country=TH&radius=10000`);
-let data = await response.json();
-if(data.results.length>0){
-let city=data.results[0].city;
-document.getElementById("provinceSelect").value=city;
-loadData();
+data:{
+labels:labels,
+datasets:[{
+label:"ค่าเฉลี่ย PM2.5",
+data:values
+}]
 }
 });
 }
