@@ -3,191 +3,175 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 Thailand Ultra Pro</title>
-
+<title>PM2.5 Thailand Research Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-body{
-    margin:0;
-    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-    text-align:center;
-    transition:0.5s;
-    color:white;
-}
-.container{padding:20px;max-width:600px;margin:auto;}
-h2{margin-top:10px;}
-.big{font-size:64px;font-weight:bold;margin:10px 0;}
-.card{
-    background:rgba(0,0,0,0.25);
-    padding:20px;
-    margin:15px 0;
-    border-radius:20px;
-}
-select,button{
-    padding:12px;
-    border-radius:15px;
-    border:none;
-    font-size:16px;
-    width:100%;
-    margin-top:10px;
-}
-button{background:black;color:white;}
-small{opacity:0.8}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;transition:.4s;color:#fff}
+.container{max-width:720px;margin:auto;padding:18px}
+.card{background:rgba(0,0,0,.25);padding:18px;border-radius:18px;margin:14px 0}
+.big{font-size:64px;font-weight:700;margin:6px 0}
+select,button{width:100%;padding:12px;border-radius:14px;border:none;margin-top:10px;font-size:16px}
+button{background:#000;color:#fff}
+small{opacity:.9}
+hr{border:0;border-top:1px solid rgba(255,255,255,.3);margin:12px 0}
+.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.2);margin:4px 2px}
 </style>
 </head>
-
 <body>
-
 <div class="container">
 
-<h2>🌫 PM2.5 Thailand Ultra Pro</h2>
+<h2>🌫 PM2.5 Thailand – Research Dashboard</h2>
 
-<select id="province"></select>
+<button onclick="requestLocation()">📍 ใช้ตำแหน่งของฉัน (GPS)</button>
+<select id="stationSelect"></select>
 
 <div class="card">
-<div id="location">กำลังโหลด...</div>
-<div class="big" id="pm">--</div>
-<div id="status"></div>
-<div id="advice" style="margin-top:10px;"></div>
-<small id="updated"></small>
+  <div id="stationName">กำลังโหลด...</div>
+  <div class="big" id="pmValue">--</div>
+  <div id="levelText"></div>
+  <div id="coords"></div>
+  <hr>
+  <div>
+    <span class="badge">มาตรฐานไทย 24 ชม.: ≤ 37.5 µg/m³</span>
+    <span class="badge">WHO 24 ชม.: ≤ 15 µg/m³</span>
+  </div>
+  <div id="comparison"></div>
+  <small id="updated"></small>
 </div>
 
 <div class="card">
-<h3>🏆 Top 10 จังหวัดค่าฝุ่นสูงสุด</h3>
-<div id="top10"></div>
+  <h3>📈 กราฟย้อนหลัง 24 ชม.</h3>
+  <canvas id="pmChart"></canvas>
 </div>
 
-<button onclick="loadData()">🔄 รีเฟรช</button>
+<div class="card">
+  <h3>🏆 10 สถานีค่าฝุ่นสูงสุด</h3>
+  <div id="top10"></div>
+</div>
+
+<button onclick="loadStations()">🔄 รีเฟรชข้อมูล</button>
 
 </div>
 
 <script>
+const TOKEN="demo";
+const CACHE_TIME=60000;
+let stations=[];
+let chart;
 
-const CACHE_TIME = 60000;
-let globalData = [];
-
-async function fetchPrimary(){
-    const res = await fetch("https://api.openaq.org/v2/latest?country=TH&parameter=pm25&limit=200");
-    const json = await res.json();
-    return json.results;
+/* โหลดรายชื่อสถานีทั้งประเทศ */
+async function loadStations(){
+  let cache=localStorage.getItem("stations");
+  let time=localStorage.getItem("time");
+  if(cache && Date.now()-time<CACHE_TIME){
+    stations=JSON.parse(cache);
+    renderStations();
+    return;
+  }
+  const res=await fetch(`https://api.waqi.info/search/?token=${TOKEN}&keyword=thailand`);
+  const json=await res.json();
+  stations=json.data.filter(s=>s.aqi!="-").map(s=>({
+    name:s.station.name,
+    lat:s.station.geo[0],
+    lon:s.station.geo[1],
+    aqi:s.aqi,
+    uid:s.uid
+  }));
+  localStorage.setItem("stations",JSON.stringify(stations));
+  localStorage.setItem("time",Date.now());
+  renderStations();
 }
 
-async function fetchBackup(){
-    const res = await fetch("https://api.waqi.info/feed/bangkok/?token=demo");
-    const json = await res.json();
-    if(json.status==="ok"){
-        return [{
-            city:"Bangkok",
-            measurements:[{value:json.data.iaqi.pm25.v}]
-        }];
-    }
-    return [];
+function renderStations(){
+  const select=document.getElementById("stationSelect");
+  select.innerHTML="";
+  stations.forEach(s=>{
+    let op=document.createElement("option");
+    op.value=s.uid;
+    op.text=s.name;
+    select.appendChild(op);
+  });
+  select.onchange=()=>loadStationDetail(select.value);
+  loadStationDetail(select.value);
+  renderTop10();
 }
 
-async function loadData(){
+/* โหลดข้อมูลสถานี + กราฟ */
+async function loadStationDetail(uid){
+  const res=await fetch(`https://api.waqi.info/feed/@${uid}/?token=${TOKEN}`);
+  const json=await res.json();
+  const data=json.data;
 
-    let cache = localStorage.getItem("pmcache");
-    let cacheTime = localStorage.getItem("pmtime");
+  let pm=data.iaqi.pm25?data.iaqi.pm25.v:"-";
+  let lat=data.city.geo[0];
+  let lon=data.city.geo[1];
 
-    if(cache && (Date.now()-cacheTime < CACHE_TIME)){
-        render(JSON.parse(cache));
-        return;
-    }
+  document.getElementById("stationName").innerText="📍 "+data.city.name;
+  document.getElementById("pmValue").innerText=pm+" µg/m³";
+  document.getElementById("coords").innerText="พิกัด: "+lat+", "+lon;
+  document.getElementById("updated").innerText="อัปเดต: "+new Date().toLocaleString();
 
-    try{
-        let data = await fetchPrimary();
-        if(!data || data.length===0) throw "primary fail";
-        localStorage.setItem("pmcache", JSON.stringify(data));
-        localStorage.setItem("pmtime", Date.now());
-        render(data);
-    }catch{
-        try{
-            let backup = await fetchBackup();
-            render(backup);
-        }catch{
-            document.getElementById("location").innerText="❌ โหลดข้อมูลไม่ได้";
-        }
-    }
+  evaluateLevel(pm);
+  renderChart(data.forecast.daily.pm25);
 }
 
-function render(data){
+/* ระดับสุขภาพ */
+function evaluateLevel(pm){
+  pm=parseFloat(pm);
+  let text,color;
+  if(pm<=15){text="ดีมาก (ตาม WHO)";color="#4CAF50";}
+  else if(pm<=37.5){text="ผ่านมาตรฐานไทย";color="#8BC34A";}
+  else if(pm<=75){text="เริ่มมีผลกระทบ";color="#FF9800";}
+  else if(pm<=150){text="มีผลกระทบต่อสุขภาพ";color="#F44336";}
+  else{text="อันตรายมาก";color="#9C27B0";}
+  document.body.style.background=color;
+  document.getElementById("levelText").innerText=text;
 
-    globalData = data;
+  let compare="";
+  if(pm>37.5) compare+="⚠ เกินมาตรฐานไทย ";
+  if(pm>15) compare+="⚠ เกินมาตรฐาน WHO";
+  if(compare==="") compare="อยู่ในเกณฑ์ปลอดภัย";
+  document.getElementById("comparison").innerText=compare;
+}
 
-    let select=document.getElementById("province");
-    select.innerHTML="";
+/* กราฟย้อนหลัง */
+function renderChart(forecast){
+  const ctx=document.getElementById("pmChart").getContext("2d");
+  const labels=forecast.map(d=>d.day);
+  const values=forecast.map(d=>d.avg);
+  if(chart) chart.destroy();
+  chart=new Chart(ctx,{
+    type:"line",
+    data:{labels:labels,datasets:[{label:"PM2.5 µg/m³",data:values,borderWidth:2}]},
+    options:{responsive:true,plugins:{legend:{display:false}}}
+  });
+}
 
-    data.forEach(d=>{
-        let op=document.createElement("option");
-        op.value=d.measurements[0].value;
-        op.text=d.city || d.location;
-        select.appendChild(op);
+/* Top 10 */
+function renderTop10(){
+  let top=[...stations].sort((a,b)=>b.aqi-a.aqi).slice(0,10);
+  let html="";
+  top.forEach(s=>html+=`👑 ${s.name} - ${s.aqi}<br>`);
+  document.getElementById("top10").innerHTML=html;
+}
+
+/* GPS หาใกล้สุด */
+function requestLocation(){
+  navigator.geolocation.getCurrentPosition(pos=>{
+    let userLat=pos.coords.latitude;
+    let userLon=pos.coords.longitude;
+    let nearest=stations.reduce((prev,curr)=>{
+      let d1=Math.hypot(curr.lat-userLat,curr.lon-userLon);
+      let d2=Math.hypot(prev.lat-userLat,prev.lon-userLon);
+      return d1<d2?curr:prev;
     });
-
-    select.onchange=()=>{
-        updateDisplay(select.selectedOptions[0]);
-    };
-
-    updateDisplay(select.selectedOptions[0]);
-
-    let sorted=[...data]
-        .sort((a,b)=>b.measurements[0].value - a.measurements[0].value)
-        .slice(0,10);
-
-    let html="";
-    sorted.forEach(d=>{
-        html+=`👑 ${d.city || d.location} - ${d.measurements[0].value}<br>`;
-    });
-    document.getElementById("top10").innerHTML=html;
-
-    document.getElementById("updated").innerText=
-        "อัปเดตล่าสุด: "+new Date().toLocaleTimeString();
+    document.getElementById("stationSelect").value=nearest.uid;
+    loadStationDetail(nearest.uid);
+    alert("👑 แสดงสถานีใกล้คุณที่สุดแล้ว");
+  });
 }
 
-function updateDisplay(option){
-
-    let value=parseFloat(option.value);
-    document.getElementById("pm").innerText=value;
-    document.getElementById("location").innerText="📍 "+option.text;
-
-    let status="",color="",advice="";
-
-    if(value<=25){
-        color="#4CAF50";
-        status="อากาศดี";
-        advice="สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
-    }else if(value<=50){
-        color="#FFEB3B";
-        status="ปานกลาง";
-        advice="กลุ่มเสี่ยงควรเฝ้าระวังอาการ";
-    }else if(value<=100){
-        color="#FF9800";
-        status="เริ่มมีผลกระทบ";
-        advice="ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง";
-    }else if(value<=150){
-        color="#F44336";
-        status="มีผลกระทบต่อสุขภาพ";
-        advice="หลีกเลี่ยงกิจกรรมกลางแจ้ง ปิดประตูหน้าต่าง";
-    }else{
-        color="#9C27B0";
-        status="อันตรายมาก";
-        advice="งดกิจกรรมกลางแจ้ง ใช้เครื่องฟอกอากาศ อยู่ในอาคาร";
-    }
-
-    document.body.style.background=color;
-    document.getElementById("status").innerText=status;
-    document.getElementById("advice").innerText="🛡 คำแนะนำ: "+advice;
-}
-
-/* GPS แสดงตำแหน่งผู้ใช้ */
-if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(pos=>{
-        console.log("GPS Ready:",pos.coords.latitude);
-    });
-}
-
-loadData();
-
+loadStations();
 </script>
-
 </body>
 </html>
