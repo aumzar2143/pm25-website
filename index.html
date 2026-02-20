@@ -3,176 +3,155 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 Ultra Pro</title>
+<title>PM2.5 Ultra Final</title>
 
 <style>
 body{
     margin:0;
-    font-family: 'Segoe UI', sans-serif;
-    background: linear-gradient(135deg,#FFD54F,#FFB300);
-}
-
-.container{
-    max-width:1000px;
-    margin:auto;
-    padding:20px;
-}
-
-.card{
-    background:white;
-    border-radius:20px;
-    padding:30px;
-    margin-bottom:20px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.2);
-    text-align:center;
-}
-
-h1{
-    margin:0;
-}
-
-.pm-value{
-    font-size:80px;
-    font-weight:bold;
-    margin:20px 0;
-}
-
-.status{
-    font-size:22px;
-    font-weight:600;
-}
-
-select,button{
-    padding:10px 15px;
-    font-size:16px;
-    border-radius:10px;
-    border:none;
-    margin:5px;
-}
-
-button{
-    cursor:pointer;
-    background:#FF7043;
+    font-family:'Segoe UI',sans-serif;
+    transition: background 0.5s ease;
     color:white;
-    font-weight:bold;
 }
-
-button:hover{
-    opacity:0.8;
+.container{padding:15px;}
+.card{
+    background:rgba(255,255,255,0.15);
+    backdrop-filter:blur(15px);
+    border-radius:20px;
+    padding:20px;
+    margin-bottom:15px;
 }
-
-.table{
-    width:100%;
-    border-collapse:collapse;
+h1{text-align:center;font-size:22px;}
+.pm-value{font-size:60px;font-weight:bold;text-align:center;}
+.status{text-align:center;font-size:18px;font-weight:bold;}
+button{
+    width:100%;padding:12px;border:none;border-radius:15px;
+    font-size:16px;font-weight:bold;background:white;color:black;margin-top:10px;
 }
-
-.table th,.table td{
-    padding:10px;
-    border-bottom:1px solid #eee;
-}
-
-.rank1{background:#ff5252;color:white;}
-.rank2{background:#ff7043;color:white;}
-.rank3{background:#ffa726;color:white;}
+table{width:100%;font-size:14px;}
+th,td{padding:8px;text-align:center;}
+.advice{font-size:14px;margin-top:10px;line-height:1.6;}
 </style>
 </head>
-
 <body>
 
 <div class="container">
 
 <div class="card">
-    <h1>🌫️ PM2.5 Real-Time Ultra Pro</h1>
-
-    <select id="provinceSelect">
-        <option value="lampang">ลำปาง</option>
-        <option value="chiangmai">เชียงใหม่</option>
-        <option value="bangkok">กรุงเทพฯ</option>
-        <option value="chiangrai">เชียงราย</option>
-    </select>
-
-    <button onclick="loadData()">🔄 โหลดข้อมูล</button>
-    <button onclick="resetData()">♻️ รีเซท</button>
-
-    <div class="pm-value" id="pmValue">--</div>
-    <div class="status" id="statusText">รอข้อมูล...</div>
+<h1>👑 จังหวัดของคุณ</h1>
+<div class="pm-value" id="pmValue">--</div>
+<div class="status" id="statusText">กำลังตรวจสอบตำแหน่ง...</div>
+<button onclick="loadData()">🔄 รีเฟรช</button>
+<div class="advice" id="adviceText"></div>
 </div>
 
 <div class="card">
-    <h2>🏆 Top 10 จังหวัดอันตราย</h2>
-    <table class="table" id="rankingTable">
-        <thead>
-            <tr>
-                <th>อันดับ</th>
-                <th>จังหวัด</th>
-                <th>ค่า PM2.5</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+<h3>🏆 Top 10 จังหวัดฝุ่นสูงสุด</h3>
+<table>
+<thead>
+<tr><th>#</th><th>จังหวัด</th><th>PM2.5</th></tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
 </div>
 
 </div>
 
 <script>
 
-// จำลองข้อมูล (ถ้าจะต่อ API จริงค่อยเปลี่ยนตรงนี้)
-const data = {
-    lampang: 100,
-    chiangmai: 145,
-    bangkok: 85,
-    chiangrai: 170
-};
+const CACHE_TIME = 60000;
 
 function getStatus(pm){
-    if(pm <= 50) return "🟢 อากาศดีมาก";
-    if(pm <= 100) return "🟡 ปานกลาง";
-    if(pm <= 150) return "🟠 เริ่มมีผลกระทบ";
-    if(pm <= 200) return "🔴 อันตราย";
-    return "🟣 อันตรายมาก";
+    if(pm <= 50) return {text:"🟢 อากาศดีมาก", color:"linear-gradient(135deg,#00C853,#69F0AE)"};
+    if(pm <= 100) return {text:"🟡 ปานกลาง", color:"linear-gradient(135deg,#FFD600,#FFEA00)"};
+    if(pm <= 150) return {text:"🟠 เริ่มมีผลกระทบ", color:"linear-gradient(135deg,#FF6D00,#FFAB40)"};
+    if(pm <= 200) return {text:"🔴 อันตราย", color:"linear-gradient(135deg,#D50000,#FF5252)"};
+    return {text:"🟣 อันตรายมาก", color:"linear-gradient(135deg,#6A1B9A,#AB47BC)"};
 }
 
-function loadData(){
-    const province = document.getElementById("provinceSelect").value;
-    const pm = data[province];
-
-    document.getElementById("pmValue").innerText = pm;
-    document.getElementById("statusText").innerText = getStatus(pm);
-
-    generateRanking();
+// แนวทางป้องกันฝุ่นตามกรมอนามัย
+function getAdvice(pm){
+    if(pm <= 50) return "😃 ทำกิจกรรมกลางแจ้งได้ตามปกติ";
+    if(pm <= 100) return "😷 กลุ่มเสี่ยงควรสวมหน้ากากและลดกิจกรรมกลางแจ้ง";
+    if(pm <= 150) return "⚠️ ประชาชนทั่วไปควรสวมหน้ากาก PM2.5 และลดเวลานอกอาคาร";
+    if(pm <= 200) return "🚫 หลีกเลี่ยงกิจกรรมกลางแจ้ง สวมหน้ากาก N95 ทุกครั้ง";
+    return "❗ อยู่ในอาคาร ปิดประตูหน้าต่าง ใช้เครื่องฟอกอากาศ และสวม N95 หากจำเป็นต้องออกนอกบ้าน";
 }
 
-function resetData(){
-    document.getElementById("pmValue").innerText = "--";
-    document.getElementById("statusText").innerText = "รีเซทแล้ว ♻️";
-    document.querySelector("#rankingTable tbody").innerHTML = "";
+async function loadData(){
+
+    const cached = localStorage.getItem("pm_cache");
+    const cacheTime = localStorage.getItem("pm_cache_time");
+
+    let provinceData;
+
+    if(cached && cacheTime && (Date.now() - cacheTime < CACHE_TIME)){
+        provinceData = JSON.parse(cached);
+    }else{
+        const response = await fetch("https://api.openaq.org/v2/latest?country=TH&parameter=pm25&limit=1000");
+        const result = await response.json();
+
+        provinceData = {};
+        result.results.forEach(item=>{
+            const province = item.city;
+            const pm = item.measurements[0].value;
+            if(!provinceData[province] || pm > provinceData[province]){
+                provinceData[province] = pm;
+            }
+        });
+
+        localStorage.setItem("pm_cache", JSON.stringify(provinceData));
+        localStorage.setItem("pm_cache_time", Date.now());
+    }
+
+    renderTop10(provinceData);
+    detectUserProvince(provinceData);
 }
 
-function generateRanking(){
-    const tbody = document.querySelector("#rankingTable tbody");
-    tbody.innerHTML = "";
-
-    const sorted = Object.entries(data)
-        .sort((a,b)=> b[1]-a[1]);
-
-    sorted.forEach((item,index)=>{
+function renderTop10(data){
+    const sorted = Object.entries(data).sort((a,b)=> b[1]-a[1]);
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML="";
+    sorted.slice(0,10).forEach((item,index)=>{
         const row = document.createElement("tr");
-
-        if(index==0) row.classList.add("rank1");
-        if(index==1) row.classList.add("rank2");
-        if(index==2) row.classList.add("rank3");
-
-        row.innerHTML = `
-            <td>${index+1}</td>
-            <td>${item[0]}</td>
-            <td>${item[1]}</td>
-        `;
+        row.innerHTML=`<td>${index+1}</td><td>${item[0]}</td><td>${item[1]}</td>`;
         tbody.appendChild(row);
     });
 }
 
-// โหลดทันทีตอนเปิดเว็บ
+function detectUserProvince(data){
+    if(!navigator.geolocation){
+        document.getElementById("statusText").innerText="❌ GPS ไม่รองรับ";
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async position=>{
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+
+        const geo = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+        const geoData = await geo.json();
+
+        const province = geoData.address.state || geoData.address.county;
+
+        const pm = data[province];
+
+        if(pm){
+            const status = getStatus(pm);
+            document.getElementById("pmValue").innerText=pm;
+            document.getElementById("statusText").innerText=province+" "+status.text;
+            document.getElementById("adviceText").innerText=getAdvice(pm);
+            document.body.style.background=status.color;
+        }else{
+            document.getElementById("statusText").innerText="ไม่พบข้อมูลจังหวัดของคุณ";
+        }
+
+    },()=>{
+        document.getElementById("statusText").innerText="❌ อนุญาต GPS เพื่อดูข้อมูลพื้นที่ของคุณ";
+    });
+}
+
 window.onload = loadData;
+setInterval(loadData,60000);
 
 </script>
 
