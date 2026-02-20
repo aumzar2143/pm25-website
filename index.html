@@ -8,37 +8,30 @@
 <style>
 body{
     margin:0;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
     text-align:center;
     transition:0.5s;
-}
-.container{
-    padding:20px;
-}
-.big{
-    font-size:60px;
-    font-weight:bold;
-}
-.select{
-    padding:10px;
-    font-size:16px;
-    border-radius:10px;
-    margin-top:10px;
-}
-.card{
-    background:white;
-    padding:15px;
-    margin:15px;
-    border-radius:20px;
-    box-shadow:0 5px 15px rgba(0,0,0,0.1);
-}
-button{
-    padding:10px 15px;
-    border:none;
-    border-radius:15px;
-    background:#333;
     color:white;
 }
+.container{padding:20px;max-width:600px;margin:auto;}
+h2{margin-top:10px;}
+.big{font-size:64px;font-weight:bold;margin:10px 0;}
+.card{
+    background:rgba(0,0,0,0.25);
+    padding:20px;
+    margin:15px 0;
+    border-radius:20px;
+}
+select,button{
+    padding:12px;
+    border-radius:15px;
+    border:none;
+    font-size:16px;
+    width:100%;
+    margin-top:10px;
+}
+button{background:black;color:white;}
+small{opacity:0.8}
 </style>
 </head>
 
@@ -48,16 +41,18 @@ button{
 
 <h2>🌫 PM2.5 Thailand Ultra Pro</h2>
 
-<select id="province" class="select"></select>
+<select id="province"></select>
 
 <div class="card">
-<div id="location"></div>
+<div id="location">กำลังโหลด...</div>
 <div class="big" id="pm">--</div>
 <div id="status"></div>
+<div id="advice" style="margin-top:10px;"></div>
+<small id="updated"></small>
 </div>
 
 <div class="card">
-<h3>🏆 Top 10 อันตราย</h3>
+<h3>🏆 Top 10 จังหวัดค่าฝุ่นสูงสุด</h3>
 <div id="top10"></div>
 </div>
 
@@ -68,6 +63,25 @@ button{
 <script>
 
 const CACHE_TIME = 60000;
+let globalData = [];
+
+async function fetchPrimary(){
+    const res = await fetch("https://api.openaq.org/v2/latest?country=TH&parameter=pm25&limit=200");
+    const json = await res.json();
+    return json.results;
+}
+
+async function fetchBackup(){
+    const res = await fetch("https://api.waqi.info/feed/bangkok/?token=demo");
+    const json = await res.json();
+    if(json.status==="ok"){
+        return [{
+            city:"Bangkok",
+            measurements:[{value:json.data.iaqi.pm25.v}]
+        }];
+    }
+    return [];
+}
 
 async function loadData(){
 
@@ -80,72 +94,95 @@ async function loadData(){
     }
 
     try{
-        const res = await fetch("https://air4thai.pcd.go.th/services/getNewAQI_JSON.php");
-        const data = await res.json();
+        let data = await fetchPrimary();
+        if(!data || data.length===0) throw "primary fail";
         localStorage.setItem("pmcache", JSON.stringify(data));
         localStorage.setItem("pmtime", Date.now());
         render(data);
-    }catch(e){
-        alert("โหลดข้อมูลไม่ได้");
+    }catch{
+        try{
+            let backup = await fetchBackup();
+            render(backup);
+        }catch{
+            document.getElementById("location").innerText="❌ โหลดข้อมูลไม่ได้";
+        }
     }
 }
 
 function render(data){
 
-    const stations = data.stations;
+    globalData = data;
 
-    let provinceSelect = document.getElementById("province");
-    provinceSelect.innerHTML="";
+    let select=document.getElementById("province");
+    select.innerHTML="";
 
-    stations.forEach(s=>{
-        let op = document.createElement("option");
-        op.value = s.AQI.aqi;
-        op.text = s.areaEN;
-        provinceSelect.appendChild(op);
+    data.forEach(d=>{
+        let op=document.createElement("option");
+        op.value=d.measurements[0].value;
+        op.text=d.city || d.location;
+        select.appendChild(op);
     });
 
-    provinceSelect.onchange = ()=>{
-        updateDisplay(provinceSelect.selectedOptions[0]);
-    }
+    select.onchange=()=>{
+        updateDisplay(select.selectedOptions[0]);
+    };
 
-    updateDisplay(provinceSelect.selectedOptions[0]);
+    updateDisplay(select.selectedOptions[0]);
 
-    let sorted = [...stations].sort((a,b)=>b.AQI.aqi - a.AQI.aqi).slice(0,10);
-    let topHTML="";
-    sorted.forEach(s=>{
-        topHTML+=`👑 ${s.areaEN} - ${s.AQI.aqi}<br>`;
+    let sorted=[...data]
+        .sort((a,b)=>b.measurements[0].value - a.measurements[0].value)
+        .slice(0,10);
+
+    let html="";
+    sorted.forEach(d=>{
+        html+=`👑 ${d.city || d.location} - ${d.measurements[0].value}<br>`;
     });
-    document.getElementById("top10").innerHTML=topHTML;
+    document.getElementById("top10").innerHTML=html;
+
+    document.getElementById("updated").innerText=
+        "อัปเดตล่าสุด: "+new Date().toLocaleTimeString();
 }
 
 function updateDisplay(option){
-    let value = option.value;
+
+    let value=parseFloat(option.value);
     document.getElementById("pm").innerText=value;
     document.getElementById("location").innerText="📍 "+option.text;
 
-    if(value<=50){
-        document.body.style.background="#4CAF50";
-        document.getElementById("status").innerText="อากาศดี";
+    let status="",color="",advice="";
+
+    if(value<=25){
+        color="#4CAF50";
+        status="อากาศดี";
+        advice="สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ";
+    }else if(value<=50){
+        color="#FFEB3B";
+        status="ปานกลาง";
+        advice="กลุ่มเสี่ยงควรเฝ้าระวังอาการ";
     }else if(value<=100){
-        document.body.style.background="#FFEB3B";
-        document.getElementById("status").innerText="ปานกลาง";
+        color="#FF9800";
+        status="เริ่มมีผลกระทบ";
+        advice="ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง";
     }else if(value<=150){
-        document.body.style.background="#FF9800";
-        document.getElementById("status").innerText="เริ่มมีผลกระทบ";
-    }else if(value<=200){
-        document.body.style.background="#F44336";
-        document.getElementById("status").innerText="มีผลกระทบต่อสุขภาพ";
+        color="#F44336";
+        status="มีผลกระทบต่อสุขภาพ";
+        advice="หลีกเลี่ยงกิจกรรมกลางแจ้ง ปิดประตูหน้าต่าง";
     }else{
-        document.body.style.background="#9C27B0";
-        document.getElementById("status").innerText="อันตรายมาก";
+        color="#9C27B0";
+        status="อันตรายมาก";
+        advice="งดกิจกรรมกลางแจ้ง ใช้เครื่องฟอกอากาศ อยู่ในอาคาร";
     }
+
+    document.body.style.background=color;
+    document.getElementById("status").innerText=status;
+    document.getElementById("advice").innerText="🛡 คำแนะนำ: "+advice;
 }
 
-/* GPS */
+/* GPS แสดงตำแหน่งผู้ใช้ */
 if(navigator.geolocation){
-navigator.geolocation.getCurrentPosition(pos=>{
-    console.log("GPS Ready");
-});
+    navigator.geolocation.getCurrentPosition(pos=>{
+        console.log("GPS Ready:",pos.coords.latitude);
+    });
 }
 
 loadData();
