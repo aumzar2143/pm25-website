@@ -3,48 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 ประเทศไทย</title>
+<title>PM2.5 Thailand – Research Dashboard PRO</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{
-font-family: sans-serif;
-background: linear-gradient(135deg,#b31217,#e52d27);
+font-family:sans-serif;
 margin:0;
 padding:20px;
+background:#111;
 color:white;
-text-align:center;
+transition:0.5s;
 }
-.container{
-max-width:900px;
-margin:auto;
-}
+.container{max-width:1100px;margin:auto;}
 .card{
-background:rgba(0,0,0,0.85);
+background:#1e1e1e;
 padding:20px;
 border-radius:20px;
 margin-bottom:20px;
 }
-button,select{
-padding:12px;
+select,button{
+padding:10px;
 border-radius:10px;
 border:none;
 margin:5px;
-font-size:16px;
 }
 button{
 background:#ffcc00;
-font-weight:bold;
 cursor:pointer;
-}
-.aqi{
-font-size:65px;
 font-weight:bold;
 }
-.status{
-font-size:20px;
-margin-top:10px;
+.big{
+font-size:70px;
+font-weight:bold;
 }
 </style>
 </head>
@@ -52,79 +44,120 @@ margin-top:10px;
 
 <div class="container">
 
-<h1>👑 PM2.5 ประเทศไทย</h1>
+<h1>👑 PM2.5 ประเทศไทย – PRO</h1>
 
 <div class="card">
-<select id="province">
-<option value="bangkok">กรุงเทพมหานคร</option>
-<option value="chiang-mai">เชียงใหม่</option>
-<option value="chiang-rai">เชียงราย</option>
-<option value="lampang">ลำปาง</option>
-<option value="khon-kaen">ขอนแก่น</option>
-<option value="nakhon-ratchasima">นครราชสีมา</option>
-<option value="chon-buri">ชลบุรี</option>
-<option value="phuket">ภูเก็ต</option>
-<option value="songkhla">สงขลา</option>
-</select>
-<button onclick="loadData()">🔄 โหลดข้อมูล</button>
+<select id="province"></select>
+<button onclick="loadSelected()">โหลดข้อมูล</button>
+<button onclick="exportCSV()">Export CSV</button>
 </div>
 
 <div class="card">
-<div class="aqi" id="value">--</div>
-<div class="status" id="status"></div>
+<div class="big" id="aqi">--</div>
+<div id="level"></div>
+<div id="advice"></div>
 </div>
 
 <div class="card">
-<h3>📊 แนวโน้ม PM2.5</h3>
+<h3>📊 แนวโน้มย้อนหลัง</h3>
 <canvas id="chart"></canvas>
+</div>
+
+<div class="card">
+<h3>🔥 Top 10 จังหวัดค่าฝุ่นสูงสุด</h3>
+<div id="top10"></div>
 </div>
 
 </div>
 
 <script>
 
-const TOKEN = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
+const TOKEN="05dc64914ef2d1b7c4d2678a15450338e660ea53";
+
+let stations=[];
 
 function getLevel(aqi){
-if(aqi<=50) return "🟢 คุณภาพอากาศดี";
-if(aqi<=100) return "🟡 ปานกลาง";
-if(aqi<=150) return "🟠 เริ่มมีผลกระทบต่อสุขภาพ";
-if(aqi<=200) return "🔴 มีผลกระทบต่อสุขภาพ";
-return "🟣 อันตรายมาก";
+if(aqi<=50) return ["🟢 ดี","#2ecc71"];
+if(aqi<=100) return ["🟡 ปานกลาง","#f1c40f"];
+if(aqi<=150) return ["🟠 เริ่มมีผลกระทบ","#e67e22"];
+if(aqi<=200) return ["🔴 มีผลกระทบ","#e74c3c"];
+return ["🟣 อันตรายมาก","#8e44ad"];
 }
 
-async function loadData(){
-let province = document.getElementById("province").value;
-let res = await fetch(`https://api.waqi.info/feed/${province}/?token=${TOKEN}`);
-let data = await res.json();
+function getAdvice(aqi){
+if(aqi<=50) return "ทำกิจกรรมกลางแจ้งได้ตามปกติ";
+if(aqi<=100) return "กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้ง";
+if(aqi<=150) return "ควรสวมหน้ากาก N95";
+if(aqi<=200) return "หลีกเลี่ยงกิจกรรมกลางแจ้ง";
+return "งดออกจากบ้าน ใช้เครื่องฟอกอากาศ";
+}
+
+async function loadStations(){
+let res=await fetch(`https://api.waqi.info/search/?keyword=thailand&token=${TOKEN}`);
+let data=await res.json();
+stations=data.data;
+
+let select=document.getElementById("province");
+stations.forEach(s=>{
+let opt=document.createElement("option");
+opt.value=s.station.name;
+opt.text=s.station.name;
+select.appendChild(opt);
+});
+loadTop10();
+}
+
+async function loadSelected(){
+let name=document.getElementById("province").value;
+let res=await fetch(`https://api.waqi.info/feed/${name}/?token=${TOKEN}`);
+let data=await res.json();
 
 if(data.status==="ok"){
-let aqi = data.data.aqi;
-document.getElementById("value").innerText = aqi;
-document.getElementById("status").innerText = getLevel(aqi);
+let aqi=data.data.aqi;
+document.getElementById("aqi").innerText=aqi;
+
+let lvl=getLevel(aqi);
+document.getElementById("level").innerText=lvl[0];
+document.body.style.background=lvl[1];
+
+document.getElementById("advice").innerText=getAdvice(aqi);
+
 drawChart(data.data.forecast.daily.pm25);
-}else{
-alert("โหลดข้อมูลไม่ได้ ตรวจสอบ TOKEN");
 }
 }
 
 function drawChart(forecast){
-let labels = forecast.map(d=>d.day);
-let values = forecast.map(d=>d.avg);
+let labels=forecast.map(d=>d.day);
+let values=forecast.map(d=>d.avg);
 
 new Chart(document.getElementById("chart"),{
 type:"line",
-data:{
-labels:labels,
-datasets:[{
-label:"ค่าเฉลี่ย PM2.5",
-data:values
-}]
-}
+data:{labels:labels,datasets:[{label:"PM2.5",data:values}]}
 });
 }
 
-loadData();
+function loadTop10(){
+let sorted=[...stations].sort((a,b)=>b.aqi-a.aqi).slice(0,10);
+let html="";
+sorted.forEach((s,i)=>{
+html+=`${i+1}. ${s.station.name} - ${s.aqi}<br>`;
+});
+document.getElementById("top10").innerHTML=html;
+}
+
+function exportCSV(){
+let csv="Station,AQI\n";
+stations.forEach(s=>{
+csv+=`${s.station.name},${s.aqi}\n`;
+});
+let blob=new Blob([csv],{type:"text/csv"});
+let link=document.createElement("a");
+link.href=URL.createObjectURL(blob);
+link.download="pm25_thailand.csv";
+link.click();
+}
+
+loadStations();
 
 </script>
 
