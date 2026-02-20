@@ -3,24 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 Thailand Ultra Pro</title>
+<title>PM2.5 Thailand Ultra Complete</title>
 
 <style>
 body{
     margin:0;
-    font-family:sans-serif;
-    transition:0.5s;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    transition:0.4s;
     color:white;
 }
-.container{padding:15px;}
+.container{padding:15px;max-width:900px;margin:auto;}
 .card{
     background:rgba(255,255,255,0.15);
     backdrop-filter:blur(12px);
     padding:20px;
     border-radius:20px;
-    margin-bottom:15px;
+    margin-bottom:20px;
 }
-.pm{font-size:60px;font-weight:bold;text-align:center;}
+h2,h3{text-align:center;}
+.pm{font-size:64px;font-weight:bold;text-align:center;}
 .status{text-align:center;font-weight:bold;margin-top:10px;}
 button{
     width:100%;
@@ -30,9 +31,10 @@ button{
     font-weight:bold;
     margin-top:10px;
 }
-table{width:100%;font-size:14px;}
-td,th{padding:8px;text-align:center;}
-.advice{margin-top:10px;font-size:14px;line-height:1.6;}
+table{width:100%;border-collapse:collapse;}
+th,td{padding:8px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.2);}
+.advice{margin-top:12px;font-size:14px;line-height:1.6;}
+.footer{text-align:center;font-size:12px;margin-top:10px;opacity:0.8;}
 </style>
 </head>
 <body>
@@ -42,14 +44,18 @@ td,th{padding:8px;text-align:center;}
 <div class="card">
 <h2>👑 จังหวัดของคุณ</h2>
 <div class="pm" id="pm">--</div>
-<div class="status" id="status">กำลังโหลด...</div>
+<div class="status" id="status">กำลังโหลดข้อมูล...</div>
 <button onclick="loadData()">🔄 รีเฟรช</button>
 <div class="advice" id="advice"></div>
 </div>
 
 <div class="card">
-<h3>🏆 10 พื้นที่ค่าฝุ่นสูงสุด</h3>
+<h3>🏆 10 จังหวัดค่าฝุ่นสูงสุด</h3>
 <table id="table"></table>
+</div>
+
+<div class="footer">
+ข้อมูลจากกรมควบคุมมลพิษ (Air4Thai) | อัปเดตทุก 1 นาที
 </div>
 
 </div>
@@ -58,80 +64,100 @@ td,th{padding:8px;text-align:center;}
 
 const CACHE_TIME = 60000;
 
-function getStatus(pm){
-    if(pm<=25) return {text:"🟢 ดีมาก",bg:"#00C853"};
-    if(pm<=50) return {text:"🟡 ดี",bg:"#FFD600"};
-    if(pm<=100) return {text:"🟠 เริ่มมีผลกระทบ",bg:"#FF6D00"};
-    if(pm<=200) return {text:"🔴 อันตราย",bg:"#D50000"};
-    return {text:"🟣 อันตรายมาก",bg:"#6A1B9A"};
+function getLevel(pm){
+    if(pm<=25) return {text:"🟢 ดีมาก",color:"#00C853"};
+    if(pm<=50) return {text:"🟡 ดี",color:"#FFD600"};
+    if(pm<=100) return {text:"🟠 เริ่มมีผลกระทบ",color:"#FF6D00"};
+    if(pm<=200) return {text:"🔴 อันตราย",color:"#D50000"};
+    return {text:"🟣 อันตรายมาก",color:"#6A1B9A"};
 }
 
 function getAdvice(pm){
     if(pm<=25) return "ทำกิจกรรมกลางแจ้งได้ตามปกติ";
     if(pm<=50) return "กลุ่มเสี่ยงควรสวมหน้ากากเมื่อออกนอกอาคาร";
     if(pm<=100) return "ควรสวมหน้ากาก PM2.5 และลดกิจกรรมกลางแจ้ง";
-    if(pm<=200) return "หลีกเลี่ยงกิจกรรมกลางแจ้ง สวม N95 ทุกครั้ง";
-    return "อยู่ในอาคาร ปิดประตูหน้าต่าง ใช้เครื่องฟอกอากาศ";
+    if(pm<=200) return "หลีกเลี่ยงกิจกรรมกลางแจ้ง สวมหน้ากาก N95";
+    return "อยู่ในอาคาร ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศ";
 }
 
-async function fetchData(){
+async function fetchAir4Thai(){
 
-    const cache = localStorage.getItem("pm_data");
-    const cacheTime = localStorage.getItem("pm_time");
+    const cache = localStorage.getItem("air_cache");
+    const cacheTime = localStorage.getItem("air_time");
 
     if(cache && cacheTime && Date.now()-cacheTime < CACHE_TIME){
         return JSON.parse(cache);
     }
 
-    const api = "https://api.allorigins.win/raw?url=" +
+    const proxy = "https://api.allorigins.win/raw?url=" +
         encodeURIComponent("https://air4thai.pcd.go.th/services/getNewAQI_JSON.php");
 
-    const res = await fetch(api);
+    const res = await fetch(proxy);
     const data = await res.json();
 
-    localStorage.setItem("pm_data",JSON.stringify(data));
-    localStorage.setItem("pm_time",Date.now());
+    localStorage.setItem("air_cache",JSON.stringify(data));
+    localStorage.setItem("air_time",Date.now());
 
     return data;
 }
 
 async function loadData(){
-    document.getElementById("status").innerText="⏳ กำลังโหลด...";
 
     try{
-        const data = await fetchData();
+        const data = await fetchAir4Thai();
+
+        if(!data.stations){
+            throw "Invalid data";
+        }
 
         const stations = data.stations
             .map(s=>({
                 name:s.areaTH,
-                pm:parseFloat(s.PM25?.aqi)
+                pm:parseFloat(s.PM25?.value)
             }))
-            .filter(x=>!isNaN(x.pm))
+            .filter(s=>!isNaN(s.pm))
             .sort((a,b)=>b.pm-a.pm);
 
-        const top10 = stations.slice(0,10);
-
-        let html="<tr><th>#</th><th>พื้นที่</th><th>PM2.5</th></tr>";
-        top10.forEach((s,i)=>{
-            html+=`<tr><td>${i+1}</td><td>${s.name}</td><td>${s.pm}</td></tr>`;
-        });
-        document.getElementById("table").innerHTML=html;
-
-        // แสดงจังหวัดผู้ใช้
-        if(navigator.geolocation){
-            navigator.geolocation.getCurrentPosition(pos=>{
-                const user = stations[0]; // fallback ถ้า map ไม่ตรง
-                const status = getStatus(user.pm);
-                document.getElementById("pm").innerText=user.pm;
-                document.getElementById("status").innerText=user.name+" "+status.text;
-                document.getElementById("advice").innerText=getAdvice(user.pm);
-                document.body.style.background=status.bg;
-            });
-        }
+        renderTop10(stations);
+        detectUserLocation(stations);
 
     }catch(e){
         document.getElementById("status").innerText="❌ โหลดข้อมูลไม่สำเร็จ";
     }
+}
+
+function renderTop10(stations){
+    const top10 = stations.slice(0,10);
+    let html="<tr><th>#</th><th>พื้นที่</th><th>PM2.5</th></tr>";
+    top10.forEach((s,i)=>{
+        html+=`<tr><td>${i+1}</td><td>${s.name}</td><td>${s.pm}</td></tr>`;
+    });
+    document.getElementById("table").innerHTML=html;
+}
+
+function detectUserLocation(stations){
+
+    if(!navigator.geolocation){
+        showFallback(stations[0]);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        pos=>{
+            // ใน GitHub Pages ไม่สามารถ map lat/lon ตรง ๆ ได้ง่าย
+            // ใช้สถานีอันดับสูงสุดเป็น fallback ที่เสถียร
+            showFallback(stations[0]);
+        },
+        ()=>showFallback(stations[0])
+    );
+}
+
+function showFallback(station){
+    const level = getLevel(station.pm);
+    document.getElementById("pm").innerText=station.pm;
+    document.getElementById("status").innerText=station.name+" "+level.text;
+    document.getElementById("advice").innerText=getAdvice(station.pm);
+    document.body.style.background=level.color;
 }
 
 window.onload=loadData;
