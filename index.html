@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 จังหวัดลำปาง</title>
+<title>PM2.5 ลำปาง Full Research</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -12,13 +12,12 @@
 body{
   margin:0;
   font-family:system-ui;
-  background:#222;
   color:white;
   text-align:center;
   transition:0.4s;
 }
 .card{
-  background:#111;
+  background:rgba(0,0,0,0.8);
   margin:15px;
   padding:20px;
   border-radius:20px;
@@ -34,11 +33,14 @@ button{
 .refresh{background:#00c853;color:white;}
 .gps{background:#2962ff;color:white;}
 .export{background:#ffc107;color:black;}
-.rank-card{
+.rank{
   background:#1a1a1a;
-  margin:10px;
+  margin:5px;
   padding:10px;
   border-radius:10px;
+}
+.highlight{
+  border:2px solid #fff;
 }
 </style>
 </head>
@@ -52,13 +54,14 @@ button{
 <p id="statusText">กำลังโหลด...</p>
 <p id="locationText"></p>
 
-<button class="refresh" onclick="loadData()">🔄 รีเฟรช</button>
+<button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
 </div>
 
 <div class="card">
-<h3>📊 แนวโน้มย้อนหลัง 7 วัน</h3>
+<h3>📊 แนวโน้มย้อนหลัง</h3>
 <canvas id="chart"></canvas>
+<p id="avgText"></p>
 </div>
 
 <div class="card">
@@ -67,130 +70,128 @@ button{
 </div>
 
 <div class="card">
-<button class="export" onclick="exportCSV()">📥 Export CSV (งานวิจัย)</button>
+<button class="export" onclick="exportCSV()">📥 Export CSV</button>
 </div>
 
 <script>
-const token = "05dc64914ef2d1b7c4d2678a15450338e660ea53";
+const token="05dc64914ef2d1b7c4d2678a15450338e660ea53";
 let chart;
+let userDistrict=null;
 
-// ===== Cache 1 นาที =====
-function getCache(){
-  const cache = localStorage.getItem("pmData");
-  if(!cache) return null;
-  const data = JSON.parse(cache);
-  if(Date.now()-data.time < 60000) return data.value;
-  return null;
-}
+const districts={
+"เมืองลำปาง":[18.2888,99.4908],
+"แม่เมาะ":[18.2923,99.7567],
+"งาว":[18.7833,99.9667],
+"แจ้ห่ม":[18.7167,99.6167],
+"เกาะคา":[18.2000,99.3667],
+"เถิน":[17.6333,99.2333],
+"แม่พริก":[17.5167,99.1500],
+"วังเหนือ":[19.1500,99.6000],
+"เสริมงาม":[18.1167,99.1500],
+"สบปราบ":[17.8833,99.3500],
+"ห้างฉัตร":[18.3167,99.3500],
+"เมืองปาน":[18.7667,99.4500],
+"แม่ทะ":[18.1000,99.5667]
+};
 
-function setCache(value){
-  localStorage.setItem("pmData", JSON.stringify({
-    time:Date.now(),
-    value:value
-  }));
-}
-
-// ===== เปลี่ยนสีพื้นหลัง =====
 function setBG(pm){
-  if(pm<=25) document.body.style.background="#2e7d32";
-  else if(pm<=50) document.body.style.background="#f9a825";
-  else if(pm<=100) document.body.style.background="#ef6c00";
-  else document.body.style.background="#c62828";
+if(pm<=25) document.body.style.background="#2e7d32";
+else if(pm<=50) document.body.style.background="#f9a825";
+else if(pm<=100) document.body.style.background="#ef6c00";
+else if(pm<=150) document.body.style.background="#c62828";
+else document.body.style.background="#6a1b9a";
 }
 
-// ===== โหลดข้อมูล =====
-async function loadData(){
-  let cached = getCache();
-  if(cached){
-    render(cached);
-    return;
-  }
-
-  const res = await fetch(`https://api.waqi.info/feed/lampang/?token=${token}`);
-  const data = await res.json();
-  const pm = data.data.iaqi.pm25.v;
-  setCache(pm);
-  render(pm);
+function advice(pm){
+if(pm<=25) return "🟢 อากาศดี";
+if(pm<=50) return "🟡 เริ่มมีผลกระทบ";
+if(pm<=100) return "🟠 ควรใส่ N95";
+if(pm<=150) return "🔴 หลีกเลี่ยงกิจกรรมกลางแจ้ง";
+return "🟣 อันตรายมาก";
 }
 
-function render(pm){
-  document.getElementById("pmValue").innerText = pm + " µg/m³";
-  document.getElementById("statusText").innerText = getAdvice(pm);
-  setBG(pm);
-  loadChart();
-  loadRanking();
+async function fetchPM(lat,lon){
+const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`);
+const data=await res.json();
+return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0;
 }
 
-// ===== คำแนะนำกรมอนามัย =====
-function getAdvice(pm){
-  if(pm<=25) return "🟢 อากาศดี ทำกิจกรรมได้ตามปกติ";
-  if(pm<=50) return "🟡 เริ่มมีผลกระทบ ควรลดกิจกรรมกลางแจ้ง";
-  if(pm<=100) return "🟠 ควรสวมหน้ากาก N95";
-  return "🔴 อันตราย ควรหลีกเลี่ยงกิจกรรมกลางแจ้ง";
+async function loadAll(){
+let results=[];
+for(const name in districts){
+let [lat,lon]=districts[name];
+let pm=await fetchPM(lat,lon);
+results.push({name,pm});
+}
+results.sort((a,b)=>b.pm-a.pm);
+
+let html="";
+results.forEach((d,i)=>{
+let cls="rank";
+if(d.name===userDistrict) cls+=" highlight";
+html+=`<div class="${cls}">
+${i+1}. ${d.name} - ${d.pm} µg/m³
+</div>`;
+});
+document.getElementById("ranking").innerHTML=html;
+
+let mainPM=results[0].pm;
+document.getElementById("pmValue").innerText=mainPM+" µg/m³";
+document.getElementById("statusText").innerText=advice(mainPM);
+setBG(mainPM);
+
+loadChart(results.map(r=>r.pm));
 }
 
-// ===== กราฟ =====
-function loadChart(){
-  const ctx = document.getElementById("chart");
-  if(chart) chart.destroy();
-  chart = new Chart(ctx,{
-    type:"line",
-    data:{
-      labels:["1","2","3","4","5","6","7"],
-      datasets:[{
-        label:"PM2.5",
-        data:[150,140,170,160,200,180,160]
-      }]
-    }
-  });
+function loadChart(data){
+if(chart) chart.destroy();
+chart=new Chart(document.getElementById("chart"),{
+type:"line",
+data:{
+labels:Object.keys(districts),
+datasets:[{label:"PM2.5",data:data}]
+}
+});
+let avg=data.reduce((a,b)=>a+b)/data.length;
+document.getElementById("avgText").innerText=
+"ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)+" µg/m³";
 }
 
-// ===== Ranking อำเภอ =====
-function loadRanking(){
-  const districts=[
-    {name:"เมืองลำปาง",pm:107},
-    {name:"แม่เมาะ",pm:120},
-    {name:"งาว",pm:95},
-    {name:"เกาะคา",pm:110},
-    {name:"แจ้ห่ม",pm:130}
-  ];
-  districts.sort((a,b)=>b.pm-a.pm);
-
-  let html="";
-  districts.forEach((d,i)=>{
-    html+=`<div class="rank-card">
-      ${i+1}. ${d.name} - ${d.pm} µg/m³
-    </div>`;
-  });
-  document.getElementById("ranking").innerHTML=html;
-}
-
-// ===== GPS =====
 function useGPS(){
-  if(!navigator.geolocation){
-    alert("อุปกรณ์ไม่รองรับ GPS");
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const lat=pos.coords.latitude;
-    const lon=pos.coords.longitude;
-    document.getElementById("locationText").innerText=
-      "📍 ตำแหน่งปัจจุบัน: "+lat.toFixed(4)+","+lon.toFixed(4);
-  });
+navigator.geolocation.getCurrentPosition(async pos=>{
+let lat=pos.coords.latitude;
+let lon=pos.coords.longitude;
+document.getElementById("locationText").innerText=
+"📍 พิกัดปัจจุบัน: "+lat.toFixed(4)+","+lon.toFixed(4);
+userDistrict=findClosest(lat,lon);
+loadAll();
+});
 }
 
-// ===== Export CSV =====
+function findClosest(lat,lon){
+let min=999999;
+let closest=null;
+for(const name in districts){
+let [dlat,dlon]=districts[name];
+let dist=Math.hypot(lat-dlat,lon-dlon);
+if(dist<min){min=dist;closest=name;}
+}
+return closest;
+}
+
 function exportCSV(){
-  const data="District,PM2.5\nเมืองลำปาง,107\nแม่เมาะ,120";
-  const blob=new Blob([data],{type:"text/csv"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;
-  a.download="pm25_lampang.csv";
-  a.click();
+let csv="District,PM2.5\n";
+document.querySelectorAll(".rank").forEach(el=>{
+csv+=el.innerText.replace(" - ",",")+"\n";
+});
+let blob=new Blob([csv],{type:"text/csv"});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="pm25_lampang_full.csv";
+a.click();
 }
 
-loadData();
+loadAll();
 </script>
 
 </body>
