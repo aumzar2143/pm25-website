@@ -9,9 +9,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0984e3">
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -66,11 +63,16 @@ margin:6px;
 cursor:pointer;
 font-size:15px;
 transition:0.3s;
+position:relative;
+overflow:hidden;
+}
+
+button:hover{
+transform:scale(1.05);
 }
 
 .refresh{background:#00b894;color:white;}
 .gps{background:#0984e3;color:white;}
-.test{background:#e17055;color:white;}
 
 .rank{
 background:#f1f5f9;
@@ -89,6 +91,12 @@ height:420px;
 border-radius:15px;
 }
 
+.legend{
+text-align:left;
+max-width:420px;
+margin:auto;
+}
+
 canvas{
 max-height:320px;
 }
@@ -99,6 +107,24 @@ color:white;
 padding:10px;
 display:none;
 font-weight:bold;
+animation:blink 1.5s infinite;
+}
+
+@keyframes blink{
+0%{opacity:1}
+50%{opacity:0.4}
+100%{opacity:1}
+}
+
+.advice ul{
+text-align:left;
+max-width:600px;
+margin:auto;
+}
+
+@keyframes bounce{
+0%,100%{transform:translateY(0)}
+50%{transform:translateY(-10px)}
 }
 
 </style>
@@ -122,7 +148,14 @@ font-weight:bold;
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
-<button class="test" onclick="testSound()">🔊 ทดสอบเสียง</button>
+<button onclick="testSound()" style="background:#e17055;color:white;">🔊 ทดสอบเสียง</button>
+
+</div>
+
+<div class="card advice">
+
+<h3>🩺 คำแนะนำสุขภาพ</h3>
+<div id="healthAdvice"></div>
 
 </div>
 
@@ -130,6 +163,18 @@ font-weight:bold;
 
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
 <div id="map"></div>
+
+<div class="legend">
+
+<b>ระดับคุณภาพอากาศ</b>
+
+<div>🟢 0-25 อากาศดี</div>
+<div>🟡 26-50 ปานกลาง</div>
+<div>🟠 51-100 เริ่มมีผลกระทบ</div>
+<div>🔴 101-150 มีผลต่อสุขภาพ</div>
+<div>🟣 151+ อันตรายมาก</div>
+
+</div>
 
 </div>
 
@@ -155,33 +200,15 @@ let map
 let chart
 let markers=[]
 let userDistrict=null
+let userMarker=null
+let accuracyCircle=null
 
-// ---------- เสียงเตือน ----------
-let alarmSound=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
+const alarmSound=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
 
 function testSound(){
-
 alarmSound.play()
-
 }
 
-// ---------- LINE ALERT ----------
-const lineToken="PUT_LINE_TOKEN"
-
-function sendLine(pm){
-
-fetch("https://notify-api.line.me/api/notify",{
-method:"POST",
-headers:{
-"Content-Type":"application/x-www-form-urlencoded",
-"Authorization":"Bearer "+lineToken
-},
-body:"message=🚨 PM2.5 Lampang = "+pm+" µg/m³"
-})
-
-}
-
-// ---------- Notification ----------
 function sendNotification(pm){
 
 if(Notification.permission==="granted"){
@@ -197,17 +224,10 @@ alarmSound.play()
 
 }
 
-function requestNotify(){
-
 if("Notification" in window){
-
 Notification.requestPermission()
-
 }
 
-}
-
-// ---------- districts ----------
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
 "แม่เมาะ":[18.2923,99.7567],
@@ -230,6 +250,19 @@ if(pm<=50)return"#f1c40f"
 if(pm<=100)return"#e67e22"
 if(pm<=150)return"#e74c3c"
 return"#8e44ad"
+}
+
+function setBackground(pm){
+
+let bg=""
+
+if(pm<=25)bg="linear-gradient(135deg,#2ecc71,#a8e6cf)"
+else if(pm<=50)bg="linear-gradient(135deg,#f1c40f,#ffeaa7)"
+else if(pm<=100)bg="linear-gradient(135deg,#e67e22,#fab1a0)"
+else if(pm<=150)bg="linear-gradient(135deg,#e74c3c,#ff7675)"
+else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
+
+document.body.style.background=bg
 }
 
 async function fetchPM(lat,lon){
@@ -269,15 +302,15 @@ results.push({name,pm,lat,lon})
 results.sort((a,b)=>b.pm-a.pm)
 
 let rankingHTML=""
-let labels=[]
-let data=[]
+let chartLabels=[]
+let chartData=[]
 
 results.forEach((d,i)=>{
 
-labels.push(d.name)
-data.push(d.pm)
+chartLabels.push(d.name)
+chartData.push(d.pm)
 
-rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm}</div>`
+rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 let circle=L.circle([d.lat,d.lon],{
 radius:7000,
@@ -296,17 +329,16 @@ let mainPM=results[0].pm
 
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 
+document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
+
+setBackground(mainPM)
+
 if(mainPM>100){
-
 document.getElementById("alertBox").style.display="block"
-
 sendNotification(mainPM)
-
-sendLine(mainPM)
-
 }
 
-loadChart(labels,data)
+loadChart(chartLabels,chartData)
 
 }
 
@@ -322,8 +354,7 @@ data:{
 labels:labels,
 datasets:[{
 label:"PM2.5",
-data:data,
-backgroundColor:"#0984e3"
+data:data
 }]
 }
 }
@@ -338,25 +369,17 @@ navigator.geolocation.getCurrentPosition(pos=>{
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
-L.marker([lat,lon]).addTo(map)
+map.setView([lat,lon],13)
 
-map.setView([lat,lon],12)
+L.marker([lat,lon]).addTo(map)
+.bindPopup("📍 ตำแหน่งของคุณ")
+.openPopup()
 
 })
 
 }
 
-// ---------- PWA ----------
-if("serviceWorker" in navigator){
-
-navigator.serviceWorker.register("sw.js")
-
-}
-
 initMap()
-
-requestNotify()
-
 loadAll()
 
 setInterval(loadAll,300000)
