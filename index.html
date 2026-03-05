@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>PM2.5 Lampang Research Platform</title>
+<title>PM2.5 Health Monitoring System - Lampang</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -16,50 +16,70 @@
 
 body{
 margin:0;
-font-family:system-ui;
-color:white;
+font-family:'Segoe UI',system-ui;
+background:#eef5f9;
+color:#1a2b3c;
 text-align:center;
-transition:0.4s;
 }
 
 h2{
-margin-top:10px;
+color:#0a6ebd;
+margin-top:15px;
 }
 
 .card{
-background:rgba(0,0,0,0.8);
-margin:15px;
-padding:20px;
-border-radius:20px;
+background:white;
+margin:20px auto;
+padding:25px;
+border-radius:18px;
+max-width:900px;
+box-shadow:0 10px 30px rgba(0,0,0,0.08);
+border-left:6px solid #0a6ebd;
+}
+
+#pmValue{
+font-size:70px;
+font-weight:bold;
+color:#0a6ebd;
 }
 
 button{
-padding:10px 15px;
+padding:10px 18px;
 border:none;
 border-radius:10px;
-margin:5px;
+margin:6px;
 font-size:14px;
 cursor:pointer;
 }
 
-.refresh{background:#00c853;color:white;}
-.gps{background:#2962ff;color:white;}
-.export{background:#ffc107;color:black;}
+.refresh{
+background:#00b894;
+color:white;
+}
+
+.gps{
+background:#0984e3;
+color:white;
+}
+
+.export{
+background:#fdcb6e;
+}
 
 .rank{
-background:#1a1a1a;
-margin:5px;
-padding:10px;
+background:#f4f7fb;
+margin:6px;
+padding:12px;
 border-radius:10px;
 }
 
 .highlight{
-border:2px solid white;
+border:2px solid #0984e3;
 }
 
 #map{
 height:400px;
-border-radius:15px;
+border-radius:12px;
 }
 
 </style>
@@ -68,14 +88,13 @@ border-radius:15px;
 
 <body>
 
-<h2>🌫 PM2.5 จังหวัดลำปาง Dashboard</h2>
+<h2>🩺 PM2.5 Health Monitoring System - Lampang</h2>
 
 <div class="card">
 
 <h1 id="pmValue">--</h1>
 <p id="statusText">กำลังโหลด...</p>
 <p id="aqiText"></p>
-<p id="windText"></p>
 <p id="locationText"></p>
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
@@ -87,7 +106,6 @@ border-radius:15px;
 <div class="card">
 
 <h3>🩺 คำแนะนำสุขภาพ</h3>
-
 <p id="healthAdvice"></p>
 
 </div>
@@ -96,7 +114,6 @@ border-radius:15px;
 <div class="card">
 
 <h3>📊 แนวโน้ม PM2.5</h3>
-
 <canvas id="chart"></canvas>
 
 <p id="avgText"></p>
@@ -109,7 +126,6 @@ border-radius:15px;
 <div class="card">
 
 <h3>🏆 อันดับอำเภอ</h3>
-
 <div id="ranking"></div>
 
 </div>
@@ -118,7 +134,6 @@ border-radius:15px;
 <div class="card">
 
 <h3>🗺 แผนที่ฝุ่น</h3>
-
 <div id="map"></div>
 
 </div>
@@ -164,13 +179,14 @@ const districts={
 
 function aqiColor(pm){
 
-if(pm<=25) return "#2e7d32"
-if(pm<=50) return "#f9a825"
-if(pm<=100) return "#ef6c00"
-if(pm<=150) return "#c62828"
-return "#6a1b9a"
+if(pm<=25) return "#2ecc71"
+if(pm<=50) return "#f1c40f"
+if(pm<=100) return "#e67e22"
+if(pm<=150) return "#e74c3c"
+return "#ff0000"
 
 }
+
 
 
 function advice(pm){
@@ -179,7 +195,7 @@ if(pm<=25) return "🟢 อากาศดี"
 if(pm<=50) return "🟡 เริ่มมีผลกระทบ"
 if(pm<=100) return "🟠 ควรใส่หน้ากาก"
 if(pm<=150) return "🔴 หลีกเลี่ยงกิจกรรมกลางแจ้ง"
-return "🟣 อันตรายมาก"
+return "🚨 อันตรายมาก"
 
 }
 
@@ -189,29 +205,75 @@ function healthAdvice(pm){
 
 if(pm<=25){
 
-return "อากาศดี สามารถทำกิจกรรมกลางแจ้งได้"
+return `
+
+คุณภาพอากาศดีมาก
+
+• สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ
+• เหมาะสำหรับการออกกำลังกาย
+• เด็กและผู้สูงอายุสามารถทำกิจกรรมภายนอกได้
+• เปิดหน้าต่างเพื่อระบายอากาศได้
+
+`
 
 }
 
 if(pm<=50){
 
-return "ผู้ป่วยโรคปอดและหัวใจควรระวัง"
+return `
+
+คุณภาพอากาศปานกลาง
+
+• บุคคลทั่วไปทำกิจกรรมกลางแจ้งได้
+• ผู้ป่วยโรคหอบหืดควรระวัง
+• หากมีอาการไอควรลดกิจกรรมกลางแจ้ง
+• พกหน้ากากอนามัยไว้
+
+`
 
 }
 
 if(pm<=100){
 
-return "ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง"
+return `
+
+เริ่มมีผลกระทบต่อสุขภาพ
+
+• สวมหน้ากาก N95 เมื่อออกนอกบ้าน
+• ลดเวลาทำกิจกรรมกลางแจ้ง
+• หลีกเลี่ยงกิจกรรมหนัก
+• กลุ่มเสี่ยงควรอยู่ในอาคาร
+
+`
 
 }
 
 if(pm<=150){
 
-return "หลีกเลี่ยงกิจกรรมกลางแจ้งและปิดบ้าน"
+return `
+
+มีผลกระทบต่อสุขภาพ
+
+• หลีกเลี่ยงกิจกรรมกลางแจ้ง
+• สวมหน้ากาก N95
+• ปิดประตูหน้าต่างบ้าน
+• ใช้เครื่องฟอกอากาศ
+
+`
 
 }
 
-return "อันตรายมาก ควรอยู่ในอาคาร"
+return `
+
+อันตรายมากต่อสุขภาพ
+
+• หลีกเลี่ยงการออกจากบ้าน
+• สวมหน้ากาก N95 หากจำเป็นต้องออก
+• เด็ก ผู้สูงอายุ และผู้ป่วยควรอยู่ในอาคาร
+• ใช้เครื่องฟอกอากาศ
+• หากมีอาการหายใจลำบากให้พบแพทย์
+
+`
 
 }
 
@@ -232,9 +294,8 @@ const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${tok
 const data=await res.json()
 
 let pm=data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
-let wind=data.data.iaqi.wd?data.data.iaqi.wd.v:"-"
 
-return {pm,wind}
+return pm
 
 }
 
@@ -244,9 +305,7 @@ function initMap(){
 
 map=L.map('map').setView([18.3,99.5],9)
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-attribution:'OSM'
-}).addTo(map)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
 
 }
 
@@ -258,17 +317,14 @@ markers.forEach(m=>map.removeLayer(m))
 markers=[]
 
 let results=[]
-let windDir=""
 
 for(const name in districts){
 
 let [lat,lon]=districts[name]
 
-let data=await fetchPM(lat,lon)
+let pm=await fetchPM(lat,lon)
 
-results.push({name,pm:data.pm,lat,lon})
-
-windDir=data.wind
+results.push({name,pm,lat,lon})
 
 }
 
@@ -284,7 +340,6 @@ results.forEach((d,i)=>{
 let cls="rank"
 
 if(d.name===userDistrict) cls+=" highlight"
-
 
 html+=`<div class="${cls}">
 ${i+1}. ${d.name} - ${d.pm} µg/m³
@@ -312,7 +367,6 @@ document.getElementById("ranking").innerHTML=html
 
 let values=results.map(r=>r.pm)
 
-
 let mainPM=results[0].pm
 
 let avg=values.reduce((a,b)=>a+b)/values.length
@@ -328,16 +382,9 @@ document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
 document.getElementById("aqiText").innerText="AQI ประมาณ: "+pmToAQI(mainPM)
 
-document.getElementById("windText").innerText="🌬 ทิศทางลม: "+windDir+"°"
-
-
 document.getElementById("avgText").innerText="ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)
 document.getElementById("maxText").innerText="ค่าสูงสุด: "+max
 document.getElementById("minText").innerText="ค่าต่ำสุด: "+min
-
-
-document.body.style.background=aqiColor(mainPM)
-
 
 loadChart(values)
 
@@ -358,7 +405,6 @@ type:"bar",
 
 data:{
 labels:Object.keys(districts),
-
 datasets:[
 {
 label:"PM2.5",
@@ -385,7 +431,6 @@ let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
 document.getElementById("locationText").innerText=
-
 "📍 "+lat.toFixed(4)+","+lon.toFixed(4)
 
 userDistrict=findClosest(lat,lon)
