@@ -25,33 +25,27 @@ background:linear-gradient(135deg,#74b9ff,#dfe6e9);
 h2{
 color:white;
 margin-top:20px;
-text-shadow:0 2px 5px rgba(0,0,0,0.4);
+text-shadow:0 2px 5px rgba(0,0,0,0.3);
 }
 
 .card{
-background:rgba(255,255,255,0.92);
+background:rgba(255,255,255,0.9);
 margin:20px auto;
 padding:25px;
 border-radius:20px;
 max-width:900px;
 box-shadow:0 10px 30px rgba(0,0,0,0.25);
-transition:0.3s;
-}
-
-.card:hover{
-transform:translateY(-3px);
 }
 
 #pmValue{
 font-size:80px;
 font-weight:bold;
-transition:0.5s;
 }
 
 button{
 padding:10px 16px;
 border:none;
-border-radius:12px;
+border-radius:10px;
 margin:6px;
 cursor:pointer;
 font-size:15px;
@@ -83,8 +77,22 @@ height:420px;
 border-radius:15px;
 }
 
+.legend{
+text-align:left;
+max-width:420px;
+margin:auto;
+}
+
 canvas{
 max-height:320px;
+}
+
+.alert{
+background:#ff4d4d;
+color:white;
+padding:10px;
+display:none;
+font-weight:bold;
 }
 
 .advice ul{
@@ -93,47 +101,13 @@ max-width:600px;
 margin:auto;
 }
 
-.alertBox{
-display:none;
-background:#ff4d4d;
-color:white;
-padding:15px;
-font-size:18px;
-font-weight:bold;
-}
-
-.popupAlert{
-position:fixed;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-background:white;
-padding:30px;
-border-radius:20px;
-box-shadow:0 15px 40px rgba(0,0,0,0.4);
-display:none;
-z-index:999;
-animation:pop 0.5s;
-}
-
-@keyframes pop{
-0%{transform:scale(0.6) translate(-50%,-50%)}
-100%{transform:scale(1) translate(-50%,-50%)}
-}
-
 </style>
 </head>
 
 <body>
 
-<div id="alertBar" class="alertBox">
-🚨 ค่าฝุ่นสูงเกินมาตรฐาน กรุณาสวมหน้ากาก N95
-</div>
-
-<div id="popup" class="popupAlert">
-<h2>🚨 แจ้งเตือนค่าฝุ่น</h2>
-<p>ค่าฝุ่น PM2.5 สูงเกินมาตรฐาน</p>
-<button onclick="closePopup()">ปิด</button>
+<div id="alertBox" class="alert">
+🚨 ค่าฝุ่นเกินมาตรฐาน ควรสวมหน้ากาก N95
 </div>
 
 <h2>🌫 HappyAir HealthyLife PM2.5 - Lampang</h2>
@@ -168,6 +142,18 @@ animation:pop 0.5s;
 
 <div id="map"></div>
 
+<div class="legend">
+
+<b>ระดับคุณภาพอากาศ</b>
+
+<div>🟢 0-25 อากาศดี</div>
+<div>🟡 26-50 ปานกลาง</div>
+<div>🟠 51-100 เริ่มมีผลกระทบ</div>
+<div>🔴 101-150 มีผลต่อสุขภาพ</div>
+<div>🟣 151+ อันตรายมาก</div>
+
+</div>
+
 </div>
 
 
@@ -189,14 +175,6 @@ animation:pop 0.5s;
 </div>
 
 
-<div class="card">
-
-<button class="export" onclick="exportCSV()">📥 Export CSV</button>
-
-</div>
-
-
-
 <script>
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
@@ -205,6 +183,7 @@ let map
 let chart
 let markers=[]
 let userDistrict=null
+let userMarker=null
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -249,7 +228,7 @@ let html="<ul>"
 
 if(pm<=25){
 html+=`
-<li>สามารถทำกิจกรรมกลางแจ้งได้</li>
+<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
 <li>เหมาะสำหรับออกกำลังกาย</li>
 <li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>
 `
@@ -258,8 +237,8 @@ html+=`
 else if(pm<=50){
 html+=`
 <li>ทำกิจกรรมกลางแจ้งได้</li>
-<li>ผู้แพ้ฝุ่นควรสังเกตอาการ</li>
-<li>ควรดื่มน้ำมากขึ้น</li>
+<li>ผู้แพ้ฝุ่นควรระวัง</li>
+<li>ดื่มน้ำมากขึ้น</li>
 `
 }
 
@@ -278,7 +257,7 @@ html+=`
 <li>สวมหน้ากาก N95</li>
 <li>อยู่ในอาคาร</li>
 <li>ใช้เครื่องฟอกอากาศ</li>
-<li>เด็กและผู้สูงอายุควรระวัง</li>
+<li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>
 `
 }
 
@@ -288,26 +267,21 @@ return html
 
 }
 
-function showAlert(){
-
-document.getElementById("alertBar").style.display="block"
-document.getElementById("popup").style.display="block"
-
-}
-
-function closePopup(){
-document.getElementById("popup").style.display="none"
-}
-
 async function fetchPM(lat,lon){
+
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
 const data=await res.json()
+
 return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+
 }
 
 function initMap(){
+
 map=L.map('map').setView([18.3,99.5],9)
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
 }
 
 async function loadAll(){
@@ -320,6 +294,7 @@ let results=[]
 for(const name in districts){
 
 let [lat,lon]=districts[name]
+
 let pm=await fetchPM(lat,lon)
 
 results.push({name,pm,lat,lon})
@@ -338,11 +313,15 @@ if(d.name===userDistrict)cls+=" highlight"
 rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 let circle=L.circle([d.lat,d.lon],{
+
 radius:7000,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
 fillOpacity:0.6
+
 }).addTo(map)
+
+.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}`)
 
 markers.push(circle)
 
@@ -350,16 +329,19 @@ markers.push(circle)
 
 document.getElementById("ranking").innerHTML=rankingHTML
 
-let pm=results[0].pm
+let mainPM=results[0].pm
 
-document.getElementById("pmValue").innerText=pm
-document.getElementById("statusText").innerText="PM2.5 "+pm+" µg/m³"
+document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 
-document.getElementById("healthAdvice").innerHTML=healthAdvice(pm)
+document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
 
-setBackground(pm)
+document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
 
-if(pm>100)showAlert()
+setBackground(mainPM)
+
+if(mainPM>100){
+document.getElementById("alertBox").style.display="block"
+}
 
 loadChart(results.map(r=>r.pm))
 
@@ -385,20 +367,29 @@ data:data
 
 }
 
-function exportCSV(){
+function useGPS(){
 
-let csv="District,PM2.5\n"
+navigator.geolocation.getCurrentPosition(async pos=>{
 
-document.querySelectorAll(".rank").forEach(el=>{
-csv+=el.innerText+"\n"
+let lat=pos.coords.latitude
+let lon=pos.coords.longitude
+
+if(userMarker)map.removeLayer(userMarker)
+
+userMarker=L.marker([lat,lon]).addTo(map)
+.bindPopup("ตำแหน่งของคุณ")
+.openPopup()
+
+map.setView([lat,lon],11)
+
+const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+
+const data=await geo.json()
+
+document.getElementById("locationText").innerText=
+"📍 "+data.display_name
+
 })
-
-let blob=new Blob([csv],{type:"text/csv"})
-let a=document.createElement("a")
-
-a.href=URL.createObjectURL(blob)
-a.download="pm25_lampang.csv"
-a.click()
 
 }
 
