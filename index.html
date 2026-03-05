@@ -143,7 +143,7 @@ margin:auto;
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
 
-<button onclick="adminAlert()">🚨 ส่งแจ้งเตือนประชาชน</button>
+<button onclick="adminSendAlert()">🚨 แจ้งเตือนประชาชน</button>
 
 </div>
 
@@ -158,6 +158,18 @@ margin:auto;
 
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
 <div id="map"></div>
+
+<div class="legend">
+
+<b>ระดับคุณภาพอากาศ</b>
+
+<div>🟢 0-25 อากาศดี</div>
+<div>🟡 26-50 ปานกลาง</div>
+<div>🟠 51-100 เริ่มมีผลกระทบ</div>
+<div>🔴 101-150 มีผลต่อสุขภาพ</div>
+<div>🟣 151+ อันตรายมาก</div>
+
+</div>
 
 </div>
 
@@ -180,6 +192,10 @@ margin:auto;
 </audio>
 
 <script>
+
+/* =========================
+   โค้ดเดิมของคุณ
+========================= */
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
@@ -316,48 +332,51 @@ map.setView([lat,lon],13)
 
 }
 
-/* ===== ระบบแจ้งเตือน ===== */
+/* =========================
+   ระบบแจ้งเตือน (เพิ่มใหม่)
+========================= */
 
-function requestNotification(){
-
+function requestNotifyPermission(){
 if("Notification" in window){
 Notification.requestPermission()
 }
-
 }
 
-requestNotification()
+requestNotifyPermission()
 
-function sendNotification(title,message){
-
+function playAlertSound(){
 let sound=document.getElementById("alertSound")
-
 if(sound){
 sound.currentTime=0
 sound.play().catch(()=>{})
 }
+}
+
+function showNotification(title,message){
+
+playAlertSound()
 
 if("Notification" in window && Notification.permission==="granted"){
 
 new Notification(title,{
 body:message,
 icon:"https://cdn-icons-png.flaticon.com/512/1684/1684375.png",
-vibrate:[200,100,200,100,200]
+vibrate:[200,100,200]
 })
 
 }
 
 }
 
-function adminAlert(){
+function adminSendAlert(){
 
-let msg=prompt("พิมพ์ข้อความแจ้งเตือนประชาชน")
+let text=prompt("พิมพ์ข้อความแจ้งเตือนประชาชน")
 
-if(!msg)return
+if(!text)return
 
-let advice=" | คำแนะนำ: สวมหน้ากาก N95 หลีกเลี่ยงกิจกรรมกลางแจ้ง ปิดหน้าต่างบ้าน"
+let advice=" | คำแนะนำ: สวมหน้ากาก N95 ลดกิจกรรมกลางแจ้ง ปิดหน้าต่างบ้าน"
 
-sendNotification("🚨 แจ้งเตือนคุณภาพอากาศ",msg+advice)
+showNotification("🚨 แจ้งเตือนคุณภาพอากาศ",text+advice)
 
 alert("ส่งแจ้งเตือนแล้ว")
 
