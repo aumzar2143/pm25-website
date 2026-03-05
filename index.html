@@ -4,12 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>PM2.5 Lampang Advanced Research Dashboard</title>
+<title>PM2.5 Lampang Research Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
 <style>
 
@@ -26,19 +28,29 @@ margin:auto;
 padding:20px;
 }
 
-.card{
-background:#1e293b;
-padding:20px;
-border-radius:15px;
-margin-bottom:20px;
-box-shadow:0 10px 25px rgba(0,0,0,0.4);
-}
-
 .grid{
 display:grid;
 grid-template-columns:1fr 1fr;
 gap:20px;
 }
+
+.card{
+background:#1e293b;
+padding:20px;
+border-radius:15px;
+box-shadow:0 10px 25px rgba(0,0,0,0.5);
+}
+
+button{
+padding:10px 15px;
+border:none;
+border-radius:8px;
+cursor:pointer;
+margin:5px;
+}
+
+.refresh{background:#00c853;color:white}
+.gps{background:#2962ff;color:white}
 
 #map{
 height:500px;
@@ -46,19 +58,14 @@ border-radius:10px;
 }
 
 .rank{
-padding:10px;
-margin:5px;
 background:#0f172a;
+margin:5px;
+padding:10px;
 border-radius:8px;
 }
 
 .highlight{
 border:2px solid white;
-}
-
-.sensorCircle{
-stroke:white;
-stroke-width:1;
 }
 
 </style>
@@ -68,236 +75,222 @@ stroke-width:1;
 
 <div class="container">
 
-<h1>🌫 PM2.5 จังหวัดลำปาง Advanced Dashboard</h1>
+<h1>🌫 PM2.5 จังหวัดลำปาง (Research Platform)</h1>
 
 <div class="card">
 
 <h2 id="pmValue">--</h2>
-<p id="statusText"></p>
+<p id="statusText">กำลังโหลด...</p>
+
+<button class="refresh" onclick="loadStations()">รีเฟรช</button>
+<button class="gps" onclick="useGPS()">ใช้ GPS</button>
 
 </div>
 
 <div class="card">
-
-<h3>🩺 คำแนะนำการป้องกันฝุ่น (ละเอียด)</h3>
-
+<h3>🩺 คำแนะนำสุขภาพ</h3>
 <p id="healthAdvice"></p>
-
 </div>
 
 <div class="card">
-
-<h3>🗺 Realtime Sensor Network Map</h3>
-
+<h3>🗺 Realtime Sensor Network</h3>
 <div id="map"></div>
-
 </div>
 
 <div class="grid">
 
 <div class="card">
-
-<h3>📈 PM2.5 District Trend</h3>
-
+<h3>📈 PM2.5 Trend</h3>
 <canvas id="lineChart"></canvas>
-
 </div>
 
 <div class="card">
-
-<h3>📊 District Comparison</h3>
-
+<h3>📊 District Compare</h3>
 <canvas id="barChart"></canvas>
-
 </div>
 
 </div>
 
 <div class="card">
-
 <h3>🏆 District Ranking</h3>
-
 <div id="ranking"></div>
-
 </div>
 
 </div>
-
 
 <script>
 
-const air4thai="https://air4thai.pcd.go.th/services/getNewAQI_JSON.php"
+const token="demo"
 
-let map=L.map('map').setView([18.3,99.5],9)
+let map=L.map('map').setView([18.3,99.5],8)
+let markers=[]
+let heatLayer
+let lineChart
+let barChart
+let userDistrict=null
+let userMarker=null
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
 
-let sensorLayer=[]
-let windLayer
+function getAQIColor(pm){
 
-function getColor(pm){
-
-if(pm<=25) return "#00e400"
-if(pm<=50) return "#ffff00"
-if(pm<=100) return "#ff7e00"
+if(pm<=12) return "#00e400"
+if(pm<=35) return "#ffff00"
+if(pm<=55) return "#ff7e00"
 if(pm<=150) return "#ff0000"
-return "#8f3f97"
-
-}
-
-function getRadius(pm){
-
-return 6 + (pm/10)
-
-}
-
-function advice(pm){
-
-if(pm<=25)
-return "อากาศดี สามารถทำกิจกรรมกลางแจ้งได้"
-
-if(pm<=50)
-return "เริ่มมีผลกระทบต่อสุขภาพบางกลุ่ม"
-
-if(pm<=100)
-return "มีผลกระทบต่อสุขภาพ"
-
-if(pm<=150)
-return "เริ่มอันตรายต่อสุขภาพ"
-
-return "อันตรายมาก"
+if(pm<=250) return "#8f3f97"
+return "#7e0023"
 
 }
 
 function healthAdvice(pm){
 
-return `
+if(pm<=12)
+return "อากาศดีมาก สามารถทำกิจกรรมกลางแจ้งได้"
 
-แนวทางป้องกันฝุ่น PM2.5
+if(pm<=35)
+return "อากาศดี แต่กลุ่มเสี่ยงควรระวัง"
 
-• สวมหน้ากาก N95 หรือ KN95 ทุกครั้งเมื่อออกนอกบ้าน
+if(pm<=55)
+return "กลุ่มเสี่ยงควรสวมหน้ากาก"
 
-• หลีกเลี่ยงกิจกรรมกลางแจ้งเป็นเวลานาน
+if(pm<=150)
+return "ควรสวม N95 และลดกิจกรรมกลางแจ้ง"
 
-• ปิดประตูหน้าต่างบ้านเพื่อลดฝุ่น
+if(pm<=250)
+return "หลีกเลี่ยงกิจกรรมกลางแจ้ง"
 
-• ใช้เครื่องฟอกอากาศ HEPA
-
-• ดื่มน้ำมาก ๆ เพื่อลดการระคายเคืองทางเดินหายใจ
-
-• ล้างจมูกด้วยน้ำเกลือ
-
-• กลุ่มเสี่ยง (เด็ก ผู้สูงอายุ ผู้ป่วยโรคปอด หัวใจ) ควรอยู่ในอาคาร
-
-• หลีกเลี่ยงการออกกำลังกายกลางแจ้ง
-
-• ติดตามค่าฝุ่นจากสถานีวัดใกล้บ้าน
-
-• หากมีอาการไอ หายใจลำบาก ควรพบแพทย์
-
-• ใช้เครื่องวัดฝุ่นในบ้านเพื่อติดตามคุณภาพอากาศ
-
-• ทำความสะอาดบ้านแบบเปียกเพื่อลดฝุ่น
-
-`
+return "อันตรายต่อสุขภาพ ควรอยู่ในอาคาร"
 
 }
 
+async function loadStations(){
 
-async function loadSensors(){
+markers.forEach(m=>map.removeLayer(m))
+markers=[]
 
-let res=await fetch(air4thai)
-
+let res=await fetch("https://api.waqi.info/map/bounds/?token="+token+"&latlng=5,95,25,110")
 let data=await res.json()
 
-let stations=data.stations
+let heatData=[]
+let results=[]
 
-let heat=[]
+data.data.forEach(st=>{
 
-stations.forEach(st=>{
+let pm=st.aqi
+let lat=st.lat
+let lon=st.lon
 
-let lat=parseFloat(st.lat)
-let lon=parseFloat(st.long)
+if(pm==="-" || pm>500) return
 
-let pm=parseFloat(st.PM25?.value||0)
-
-let color=getColor(pm)
-
-let radius=getRadius(pm)
+let color=getAQIColor(pm)
 
 let circle=L.circleMarker([lat,lon],{
 
-radius:radius,
-
+radius:Math.max(5,pm/5),
 color:color,
-
-fillColor:color,
-
-fillOpacity:0.8,
-
-className:"sensorCircle"
+fillOpacity:0.8
 
 }).addTo(map)
 
-.bindPopup(`
-
-<b>${st.nameTH}</b>
-
-<br>PM2.5: ${pm}
-
-<br>AQI: ${st.AQI?.aqi}
-
+circle.bindPopup(`
+สถานี: ${st.station.name}<br>
+PM2.5: ${pm}
 `)
 
-sensorLayer.push(circle)
+markers.push(circle)
+
+heatData.push([lat,lon,pm/200])
+
+results.push({name:st.station.name,pm:pm})
+
+})
+
+createHeatmap(heatData)
+createRanking(results)
+createCharts(results)
+
+}
+
+function createHeatmap(data){
+
+if(heatLayer) map.removeLayer(heatLayer)
+
+heatLayer=L.heatLayer(data,{
+radius:35,
+blur:25
+}).addTo(map)
+
+}
+
+function createRanking(results){
+
+results.sort((a,b)=>b.pm-a.pm)
+
+let html=""
+
+results.slice(0,10).forEach((r,i)=>{
+
+html+=`<div class="rank">${i+1}. ${r.name} - ${r.pm}</div>`
+
+})
+
+document.getElementById("ranking").innerHTML=html
+
+let mainPM=results[0].pm
+
+document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+document.getElementById("statusText").innerText="AQI "+mainPM
+document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
+
+}
+
+function createCharts(results){
+
+let labels=results.slice(0,10).map(r=>r.name)
+let values=results.slice(0,10).map(r=>r.pm)
+
+if(lineChart) lineChart.destroy()
+if(barChart) barChart.destroy()
+
+lineChart=new Chart(
+document.getElementById("lineChart"),
+{
+type:"line",
+data:{labels:labels,datasets:[{label:"PM2.5",data:values}]}
+}
+)
+
+barChart=new Chart(
+document.getElementById("barChart"),
+{
+type:"bar",
+data:{labels:labels,datasets:[{label:"PM2.5",data:values}]}
+}
+)
+
+}
+
+function useGPS(){
+
+navigator.geolocation.getCurrentPosition(pos=>{
+
+let lat=pos.coords.latitude
+let lon=pos.coords.longitude
+
+map.setView([lat,lon],10)
+
+if(userMarker) map.removeLayer(userMarker)
+
+userMarker=L.marker([lat,lon]).addTo(map).bindPopup("ตำแหน่งของคุณ")
 
 })
 
 }
 
+loadStations()
 
-async function loadWind(){
-
-let res=await fetch("https://api.open-meteo.com/v1/forecast?latitude=18.3&longitude=99.5&current_weather=true")
-
-let data=await res.json()
-
-let dir=data.current_weather.winddirection
-
-let speed=data.current_weather.windspeed
-
-let arrow=L.polyline(
-
-[
-[18.3,99.5],
-[18.3 + Math.cos(dir*Math.PI/180)*0.5,
-99.5 + Math.sin(dir*Math.PI/180)*0.5]
-],
-
-{color:"cyan",weight:4}
-
-).addTo(map)
-
-.bindPopup(`Wind ${dir}° Speed ${speed} km/h`)
-
-}
-
-
-async function loadAll(){
-
-sensorLayer.forEach(s=>map.removeLayer(s))
-
-sensorLayer=[]
-
-await loadSensors()
-
-await loadWind()
-
-}
-
-loadAll()
-
-setInterval(loadAll,300000)
+setInterval(loadStations,300000)
 
 </script>
 
