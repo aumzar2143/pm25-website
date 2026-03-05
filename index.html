@@ -26,7 +26,6 @@ h2{
 color:white;
 margin-top:20px;
 text-shadow:0 2px 5px rgba(0,0,0,0.3);
-animation:fadeDown 1s;
 }
 
 .card{
@@ -36,13 +35,11 @@ padding:25px;
 border-radius:20px;
 max-width:900px;
 box-shadow:0 10px 30px rgba(0,0,0,0.25);
-animation:floatUp 1s;
 }
 
 #pmValue{
 font-size:80px;
 font-weight:bold;
-animation:pulse 2s infinite;
 }
 
 button{
@@ -52,32 +49,21 @@ border-radius:10px;
 margin:6px;
 cursor:pointer;
 font-size:15px;
-transition:0.3s;
+transition:0.2s;
 }
 
-button:hover{
-transform:scale(1.08);
+button:active{
+transform:scale(0.9);
 }
 
 .refresh{background:#00b894;color:white;}
 .gps{background:#0984e3;color:white;}
-.export{background:#fdcb6e;}
 
 .rank{
 background:#f1f5f9;
 padding:12px;
 margin:6px;
 border-radius:10px;
-transition:0.3s;
-}
-
-.rank:hover{
-transform:scale(1.03);
-}
-
-.highlight{
-border:2px solid #0984e3;
-background:#eaf4ff;
 }
 
 #map{
@@ -104,34 +90,16 @@ font-weight:bold;
 animation:blink 1s infinite;
 }
 
+@keyframes blink{
+0%{opacity:1}
+50%{opacity:0.4}
+100%{opacity:1}
+}
+
 .advice ul{
 text-align:left;
 max-width:600px;
 margin:auto;
-}
-
-/* Animations */
-
-@keyframes pulse{
-0%{transform:scale(1)}
-50%{transform:scale(1.05)}
-100%{transform:scale(1)}
-}
-
-@keyframes fadeDown{
-0%{opacity:0;transform:translateY(-20px)}
-100%{opacity:1}
-}
-
-@keyframes floatUp{
-0%{opacity:0;transform:translateY(40px)}
-100%{opacity:1}
-}
-
-@keyframes blink{
-0%{opacity:1}
-50%{opacity:0.5}
-100%{opacity:1}
 }
 
 </style>
@@ -212,18 +180,15 @@ let chart
 let markers=[]
 let userMarker=null
 
-/* เสียง */
-
-const clickSound=new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b1c68.mp3")
-
-const alertSound=new Audio("https://cdn.pixabay.com/download/audio/2022/10/16/audio_946b4c4f41.mp3")
-
 function playClick(){
-clickSound.currentTime=0
-clickSound.play()
+let audio=new Audio("https://cdn.pixabay.com/download/audio/2022/03/10/audio_270e5e5d10.mp3")
+audio.play()
 }
 
-/* districts */
+function playAlert(){
+let audio=new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9b1c68.mp3")
+audio.play()
+}
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -241,69 +206,26 @@ const districts={
 "แม่ทะ":[18.1000,99.5667]
 }
 
-function aqiColor(pm){
-if(pm<=25)return"#2ecc71"
-if(pm<=50)return"#f1c40f"
-if(pm<=100)return"#e67e22"
-if(pm<=150)return"#e74c3c"
-return"#8e44ad"
+function animatePM(value){
+
+let el=document.getElementById("pmValue")
+let start=0
+let duration=1200
+let step=value/(duration/16)
+
+let timer=setInterval(()=>{
+
+start+=step
+
+if(start>=value){
+start=value
+clearInterval(timer)
 }
 
-function setBackground(pm){
+el.innerText=Math.floor(start)+" µg/m³"
 
-let bg=""
+},16)
 
-if(pm<=25)bg="linear-gradient(135deg,#2ecc71,#a8e6cf)"
-else if(pm<=50)bg="linear-gradient(135deg,#f1c40f,#ffeaa7)"
-else if(pm<=100)bg="linear-gradient(135deg,#e67e22,#fab1a0)"
-else if(pm<=150)bg="linear-gradient(135deg,#e74c3c,#ff7675)"
-else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
-
-document.body.style.background=bg
-}
-
-function healthAdvice(pm){
-
-let html="<ul>"
-
-if(pm<=25){
-html+=`
-<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
-<li>เหมาะสำหรับออกกำลังกาย</li>
-<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>
-`
-}
-
-else if(pm<=50){
-html+=`
-<li>ทำกิจกรรมกลางแจ้งได้</li>
-<li>ผู้แพ้ฝุ่นควรระวัง</li>
-<li>ดื่มน้ำมากขึ้น</li>
-`
-}
-
-else if(pm<=100){
-html+=`
-<li>ควรใส่หน้ากาก N95</li>
-<li>ลดกิจกรรมกลางแจ้ง</li>
-<li>ปิดหน้าต่างบ้าน</li>
-<li>ใช้เครื่องฟอกอากาศ</li>
-`
-}
-
-else{
-html+=`
-<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
-<li>สวมหน้ากาก N95</li>
-<li>อยู่ในอาคาร</li>
-<li>ใช้เครื่องฟอกอากาศ</li>
-<li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>
-`
-}
-
-html+="</ul>"
-
-return html
 }
 
 async function fetchPM(lat,lon){
@@ -351,8 +273,8 @@ rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 let circle=L.circle([d.lat,d.lon],{
 
 radius:7000,
-color:aqiColor(d.pm),
-fillColor:aqiColor(d.pm),
+color:"#e74c3c",
+fillColor:"#e74c3c",
 fillOpacity:0.6
 
 }).addTo(map)
@@ -366,19 +288,15 @@ document.getElementById("ranking").innerHTML=rankingHTML
 
 let mainPM=results[0].pm
 
-document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+animatePM(mainPM)
 
 document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
-
-document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
-
-setBackground(mainPM)
 
 if(mainPM>100){
 
 document.getElementById("alertBox").style.display="block"
 
-alertSound.play()
+playAlert()
 
 }
 
@@ -402,9 +320,7 @@ data:data
 }]
 },
 options:{
-animation:{
-duration:2000
-}
+animation:{duration:2000}
 }
 }
 )
@@ -421,10 +337,19 @@ let lon=pos.coords.longitude
 if(userMarker)map.removeLayer(userMarker)
 
 userMarker=L.marker([lat,lon]).addTo(map)
-.bindPopup("ตำแหน่งของคุณ")
+.bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
 
 map.setView([lat,lon],11)
+
+const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+const data=await geo.json()
+
+let district=data.address.county || ""
+let province=data.address.state || ""
+
+document.getElementById("locationText").innerText=
+"📍 คุณอยู่ที่: "+district+" "+province
 
 })
 
