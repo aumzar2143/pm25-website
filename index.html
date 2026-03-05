@@ -193,8 +193,6 @@ margin:auto;
 
 <script>
 
-const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
-
 let map
 let chart
 let markers=[]
@@ -219,7 +217,6 @@ const districts={
 }
 
 function findDistrict(lat,lon){
-
 let minDist=999
 let closest=null
 
@@ -302,17 +299,38 @@ async function fetchPM(lat,lon){
 
 try{
 
-const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
+const res=await fetch("https://air4thai.pcd.go.th/services/getNewAQI_JSON.php")
 const data=await res.json()
 
-if(data.status==="ok" && data.data && data.data.iaqi && data.data.iaqi.pm25){
-return data.data.iaqi.pm25.v
+let nearest=999
+let pm=0
+
+data.stations.forEach(s=>{
+
+let d=Math.sqrt(
+Math.pow(lat-parseFloat(s.lat),2)+
+Math.pow(lon-parseFloat(s.long),2)
+)
+
+if(d<nearest){
+
+nearest=d
+
+if(s.LastUpdate && s.LastUpdate.PM25){
+pm=parseFloat(s.LastUpdate.PM25.value)
 }
 
-return 0
+}
+
+})
+
+return pm
 
 }catch(e){
+
+console.log(e)
 return 0
+
 }
 
 }
@@ -351,19 +369,16 @@ markers.forEach(m=>map.removeLayer(m))
 markers=[]
 
 let results=[]
-let promises=[]
 
 for(const name in districts){
 
 let [lat,lon]=districts[name]
 
-promises.push(
-fetchPM(lat,lon).then(pm=>({name,pm,lat,lon}))
-)
+let pm=await fetchPM(lat,lon)
+
+results.push({name,pm,lat,lon})
 
 }
-
-results=await Promise.all(promises)
 
 results.sort((a,b)=>b.pm-a.pm)
 
