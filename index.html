@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>PM2.5 Health Monitoring System - Lampang</title>
+<title>PM2.5 Lampang Smart Health Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -16,66 +16,50 @@
 
 body{
 margin:0;
-font-family:'Segoe UI',system-ui;
+font-family:Segoe UI;
 background:#eef5f9;
-color:#1a2b3c;
 text-align:center;
 }
 
 h2{
 color:#0a6ebd;
-margin-top:15px;
 }
 
 .card{
 background:white;
 margin:20px auto;
 padding:25px;
-border-radius:18px;
+border-radius:16px;
 max-width:900px;
-box-shadow:0 10px 30px rgba(0,0,0,0.08);
-border-left:6px solid #0a6ebd;
+box-shadow:0 8px 25px rgba(0,0,0,0.1);
 }
 
 #pmValue{
 font-size:70px;
 font-weight:bold;
-color:#0a6ebd;
 }
 
 button{
-padding:10px 18px;
+padding:10px 16px;
 border:none;
-border-radius:10px;
+border-radius:8px;
 margin:6px;
-font-size:14px;
 cursor:pointer;
 }
 
-.refresh{
-background:#00b894;
-color:white;
-}
-
-.gps{
-background:#0984e3;
-color:white;
-}
-
-.export{
-background:#fdcb6e;
-}
+.refresh{background:#00b894;color:white;}
+.gps{background:#0984e3;color:white;}
+.export{background:#fdcb6e;}
 
 .rank{
-background:#f4f7fb;
+background:#f1f5f9;
+padding:10px;
 margin:6px;
-padding:12px;
-border-radius:10px;
+border-radius:8px;
 }
 
 .highlight{
 border:2px solid #0984e3;
-background:#dfefff;
 }
 
 #map{
@@ -83,23 +67,41 @@ height:420px;
 border-radius:12px;
 }
 
-</style>
+.alert{
+background:#ff7675;
+color:white;
+padding:12px;
+border-radius:10px;
+display:none;
+font-weight:bold;
+}
 
+</style>
 </head>
+
 
 <body>
 
-<h2>🩺 PM2.5 Health Monitoring System - Lampang</h2>
+<h2>🌫 PM2.5 Smart Health Monitoring System - Lampang</h2>
 
 <div class="card">
 
-<h1 id="pmValue">--</h1>
-<p id="statusText">กำลังโหลด...</p>
-<p id="aqiText"></p>
+<div id="pmValue">--</div>
+
+<p id="statusText">กำลังโหลดข้อมูล...</p>
+
 <p id="locationText"></p>
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
+
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
+
+</div>
+
+
+<div class="card alert" id="alertBox">
+
+🚨 ค่าฝุ่นอันตราย กรุณาหลีกเลี่ยงกิจกรรมกลางแจ้ง
 
 </div>
 
@@ -107,6 +109,7 @@ border-radius:12px;
 <div class="card">
 
 <h3>🩺 คำแนะนำสุขภาพ</h3>
+
 <p id="healthAdvice"></p>
 
 </div>
@@ -115,6 +118,7 @@ border-radius:12px;
 <div class="card">
 
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
+
 <div id="map"></div>
 
 </div>
@@ -122,12 +126,9 @@ border-radius:12px;
 
 <div class="card">
 
-<h3>📊 แนวโน้ม PM2.5</h3>
-<canvas id="chart"></canvas>
+<h3>📊 กราฟ PM2.5</h3>
 
-<p id="avgText"></p>
-<p id="maxText"></p>
-<p id="minText"></p>
+<canvas id="chart"></canvas>
 
 </div>
 
@@ -135,26 +136,27 @@ border-radius:12px;
 <div class="card">
 
 <h3>🏆 อันดับอำเภอ</h3>
+
 <div id="ranking"></div>
 
 </div>
 
 
 <div class="card">
+
 <button class="export" onclick="exportCSV()">📥 Export CSV</button>
+
 </div>
 
 
 
 <script>
 
-const token="demo"
-
-let chart
 let map
+let chart
 let markers=[]
-let userDistrict=null
 let userMarker=null
+let userDistrict=null
 
 
 const districts={
@@ -179,23 +181,25 @@ const districts={
 
 function aqiColor(pm){
 
-if(pm<=25) return "#2ecc71"
-if(pm<=50) return "#f1c40f"
-if(pm<=100) return "#e67e22"
-if(pm<=150) return "#e74c3c"
-return "#ff0000"
+if(pm<=25)return"#2ecc71"
+if(pm<=50)return"#f1c40f"
+if(pm<=100)return"#e67e22"
+if(pm<=150)return"#e74c3c"
+
+return"#8e44ad"
 
 }
 
 
 
-function airLevel(pm){
+function levelText(pm){
 
-if(pm<=25) return "🟢 อากาศดี"
-if(pm<=50) return "🟡 ปานกลาง"
-if(pm<=100) return "🟠 เริ่มมีผลกระทบ"
-if(pm<=150) return "🔴 มีผลกระทบต่อสุขภาพ"
-return "🚨 อันตรายมาก"
+if(pm<=25)return"อากาศดี"
+if(pm<=50)return"ปานกลาง"
+if(pm<=100)return"เริ่มมีผลกระทบ"
+if(pm<=150)return"มีผลกระทบต่อสุขภาพ"
+
+return"อันตรายมาก"
 
 }
 
@@ -205,84 +209,37 @@ function healthAdvice(pm){
 
 if(pm<=25){
 
-return `
-
-คุณภาพอากาศดีมาก
-
-• สามารถออกกำลังกายกลางแจ้งได้
-• เด็กและผู้สูงอายุทำกิจกรรมได้
-• เปิดหน้าต่างระบายอากาศได้
-• เหมาะสำหรับกิจกรรมภายนอก
-
-`
+return"คุณภาพอากาศดี สามารถทำกิจกรรมกลางแจ้งได้"
 
 }
 
 if(pm<=50){
 
-return `
-
-คุณภาพอากาศปานกลาง
-
-• คนทั่วไปทำกิจกรรมกลางแจ้งได้
-• ผู้ป่วยหอบหืดควรระวัง
-• หากมีอาการไอควรลดกิจกรรม
-
-`
+return"คนทั่วไปทำกิจกรรมกลางแจ้งได้ แต่กลุ่มเสี่ยงควรระวัง"
 
 }
 
 if(pm<=100){
 
-return `
-
-เริ่มมีผลกระทบต่อสุขภาพ
-
-• ควรใส่หน้ากาก N95
-• ลดกิจกรรมกลางแจ้ง
-• หลีกเลี่ยงออกกำลังกายหนัก
-
-`
+return"ควรใส่หน้ากาก N95 และลดกิจกรรมกลางแจ้ง"
 
 }
 
 if(pm<=150){
 
-return `
-
-มีผลกระทบต่อสุขภาพ
-
-• หลีกเลี่ยงกิจกรรมกลางแจ้ง
-• ปิดประตูหน้าต่าง
-• ใช้เครื่องฟอกอากาศ
-
-`
+return"หลีกเลี่ยงกิจกรรมกลางแจ้ง ใช้เครื่องฟอกอากาศ"
 
 }
 
-return `
-
-อันตรายมาก
-
-• หลีกเลี่ยงออกจากบ้าน
-• สวมหน้ากาก N95
-• เด็ก ผู้สูงอายุควรอยู่ในอาคาร
-• หากหายใจลำบากควรพบแพทย์
-
-`
+return"อันตรายมาก ควรอยู่ในอาคารและสวมหน้ากาก N95"
 
 }
 
 
 
-async function fetchPM(lat,lon){
+function randomPM(){
 
-const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
-const data=await res.json()
-
-let pm=data.data?.iaqi?.pm25?.v || Math.floor(Math.random()*120)
-
-return pm
+return Math.floor(Math.random()*160)
 
 }
 
@@ -309,7 +266,7 @@ for(const name in districts){
 
 let [lat,lon]=districts[name]
 
-let pm=await fetchPM(lat,lon)
+let pm=randomPM()
 
 results.push({name,pm,lat,lon})
 
@@ -317,20 +274,17 @@ results.push({name,pm,lat,lon})
 
 results.sort((a,b)=>b.pm-a.pm)
 
-
-let html=""
+let rankingHTML=""
 
 results.forEach((d,i)=>{
 
 let cls="rank"
 
-if(d.name===userDistrict) cls+=" highlight"
+if(d.name===userDistrict)cls+=" highlight"
 
-html+=`
-<div class="${cls}">
-${i+1}. ${d.name} - ${d.pm} µg/m³ (${airLevel(d.pm)})
-</div>
-`
+rankingHTML+=`<div class="${cls}">
+${i+1}. ${d.name} - ${d.pm} µg/m³
+</div>`
 
 let circle=L.circle([d.lat,d.lon],{
 
@@ -341,42 +295,34 @@ fillOpacity:0.5
 
 }).addTo(map)
 
-.bindPopup(
-
-"<b>"+d.name+"</b><br>"+
-"PM2.5: "+d.pm+" µg/m³<br>"+
-airLevel(d.pm)
-
-)
+.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}<br>${levelText(d.pm)}`)
 
 markers.push(circle)
 
 })
 
-document.getElementById("ranking").innerHTML=html
+document.getElementById("ranking").innerHTML=rankingHTML
 
-
-let values=results.map(r=>r.pm)
 
 let mainPM=results[0].pm
 
-let avg=values.reduce((a,b)=>a+b)/values.length
-
-let max=Math.max(...values)
-
-let min=Math.min(...values)
-
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
-document.getElementById("statusText").innerText="📍 พื้นที่: "+results[0].name
-document.getElementById("aqiText").innerText="ระดับอากาศ: "+airLevel(mainPM)
+
+document.getElementById("statusText").innerText="ระดับอากาศ: "+levelText(mainPM)
 
 document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
-document.getElementById("avgText").innerText="ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)
-document.getElementById("maxText").innerText="ค่าสูงสุด: "+max
-document.getElementById("minText").innerText="ค่าต่ำสุด: "+min
+if(mainPM>120){
 
-loadChart(values)
+document.getElementById("alertBox").style.display="block"
+
+}else{
+
+document.getElementById("alertBox").style.display="none"
+
+}
+
+loadChart(results.map(r=>r.pm))
 
 }
 
@@ -384,7 +330,7 @@ loadChart(values)
 
 function loadChart(data){
 
-if(chart) chart.destroy()
+if(chart)chart.destroy()
 
 chart=new Chart(
 
@@ -392,7 +338,6 @@ document.getElementById("chart"),
 
 {
 type:"bar",
-
 data:{
 labels:Object.keys(districts),
 datasets:[
@@ -423,10 +368,10 @@ let lon=pos.coords.longitude
 document.getElementById("locationText").innerText=
 "📍 "+lat.toFixed(4)+","+lon.toFixed(4)
 
-if(userMarker) map.removeLayer(userMarker)
+if(userMarker)map.removeLayer(userMarker)
 
 userMarker=L.marker([lat,lon]).addTo(map)
-.bindPopup("📍 ตำแหน่งของคุณ")
+.bindPopup("ตำแหน่งของคุณ")
 .openPopup()
 
 map.setView([lat,lon],11)
@@ -445,7 +390,7 @@ loadAll()
 
 function findClosest(lat,lon){
 
-let min=999999
+let min=999
 let closest=null
 
 for(const name in districts){
@@ -494,6 +439,7 @@ a.click()
 
 
 initMap()
+
 loadAll()
 
 setInterval(loadAll,300000)
