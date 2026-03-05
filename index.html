@@ -12,8 +12,6 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
-
 <style>
 
 body{
@@ -37,11 +35,24 @@ padding:25px;
 border-radius:20px;
 max-width:900px;
 box-shadow:0 10px 30px rgba(0,0,0,0.25);
+animation:fadeUp 0.8s ease;
+}
+
+@keyframes fadeUp{
+from{opacity:0;transform:translateY(20px)}
+to{opacity:1;transform:translateY(0)}
 }
 
 #pmValue{
 font-size:80px;
 font-weight:bold;
+animation:pulse 2s infinite;
+}
+
+@keyframes pulse{
+0%{transform:scale(1)}
+50%{transform:scale(1.05)}
+100%{transform:scale(1)}
 }
 
 button{
@@ -50,6 +61,14 @@ border:none;
 border-radius:10px;
 margin:6px;
 cursor:pointer;
+font-size:15px;
+transition:0.3s;
+position:relative;
+overflow:hidden;
+}
+
+button:hover{
+transform:scale(1.05);
 }
 
 .refresh{background:#00b894;color:white;}
@@ -78,12 +97,23 @@ max-width:420px;
 margin:auto;
 }
 
+canvas{
+max-height:320px;
+}
+
 .alert{
 background:#ff4d4d;
 color:white;
 padding:10px;
 display:none;
 font-weight:bold;
+animation:blink 1.5s infinite;
+}
+
+@keyframes blink{
+0%{opacity:1}
+50%{opacity:0.4}
+100%{opacity:1}
 }
 
 .advice ul{
@@ -92,14 +122,15 @@ max-width:600px;
 margin:auto;
 }
 
+@keyframes bounce{
+0%,100%{transform:translateY(0)}
+50%{transform:translateY(-10px)}
+}
+
 </style>
 </head>
 
 <body>
-
-<audio id="alertSound">
-<source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg">
-</audio>
 
 <div id="alertBox" class="alert">
 🚨 ค่าฝุ่นเกินมาตรฐาน ควรสวมหน้ากาก N95
@@ -167,8 +198,9 @@ const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 let map
 let chart
 let markers=[]
-let heatLayer
+let userDistrict=null
 let userMarker=null
+let accuracyCircle=null
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -260,12 +292,31 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
 
 }
 
+function animatePM(value){
+
+let el=document.getElementById("pmValue")
+let start=0
+
+let interval=setInterval(()=>{
+
+start+=Math.ceil(value/30)
+
+if(start>=value){
+start=value
+clearInterval(interval)
+}
+
+el.innerText=start+" µg/m³"
+
+},30)
+
+}
+
 async function loadAll(){
 
 markers.forEach(m=>map.removeLayer(m))
 markers=[]
 
-let heatPoints=[]
 let results=[]
 
 for(const name in districts){
@@ -274,36 +325,38 @@ let [lat,lon]=districts[name]
 
 let pm=await fetchPM(lat,lon)
 
-heatPoints.push([lat,lon,pm])
-
 results.push({name,pm,lat,lon})
 
-let circle=L.circle([lat,lon],{
-radius:7000,
-color:aqiColor(pm),
-fillColor:aqiColor(pm),
-fillOpacity:0.6
-}).addTo(map)
-
-markers.push(circle)
-
 }
-
-heatLayer=L.heatLayer(heatPoints,{radius:40}).addTo(map)
 
 results.sort((a,b)=>b.pm-a.pm)
 
 let rankingHTML=""
 
 results.forEach((d,i)=>{
-rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm}</div>`
+
+let cls="rank"
+if(d.name===userDistrict)cls+=" highlight"
+
+rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
+
+let circle=L.circle([d.lat,d.lon],{
+radius:7000,
+color:aqiColor(d.pm),
+fillColor:aqiColor(d.pm),
+fillOpacity:0.6
+}).addTo(map)
+.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}`)
+
+markers.push(circle)
+
 })
 
 document.getElementById("ranking").innerHTML=rankingHTML
 
 let mainPM=results[0].pm
 
-document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+animatePM(mainPM)
 
 document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
 
@@ -313,7 +366,6 @@ setBackground(mainPM)
 
 if(mainPM>100){
 document.getElementById("alertBox").style.display="block"
-document.getElementById("alertSound").play()
 }
 
 loadChart(results.map(r=>r.pm))
@@ -346,13 +398,43 @@ navigator.geolocation.getCurrentPosition(async pos=>{
 
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
+let acc=pos.coords.accuracy
 
 if(userMarker)map.removeLayer(userMarker)
+if(accuracyCircle)map.removeLayer(accuracyCircle)
 
 userMarker=L.marker([lat,lon]).addTo(map)
+.bindPopup("📍 ตำแหน่งของคุณ")
+.openPopup()
 
-map.setView([lat,lon],12)
+let icon=userMarker._icon
+if(icon){
+icon.style.animation="bounce 1.2s infinite"
+}
 
+accuracyCircle=L.circle([lat,lon],{
+radius:acc,
+color:"#0984e3",
+fillColor:"#74b9ff",
+fillOpacity:0.3
+}).addTo(map)
+
+map.setView([lat,lon],13)
+
+const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+const data=await geo.json()
+
+document.getElementById("locationText").innerText=
+"📍 "+data.display_name
+
+},
+err=>{
+alert("ไม่สามารถใช้ GPS ได้ กรุณาอนุญาตตำแหน่ง")
+},
+{
+enableHighAccuracy:true,
+timeout:10000,
+maximumAge:0
 })
 
 }
