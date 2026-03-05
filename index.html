@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>PM2.5 Lampang Smart Health Dashboard</title>
+<title>PM2.5 Health Monitoring System - Lampang</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -67,41 +67,34 @@ height:420px;
 border-radius:12px;
 }
 
-.alert{
-background:#ff7675;
-color:white;
-padding:12px;
-border-radius:10px;
-display:none;
-font-weight:bold;
+.legend{
+text-align:left;
+max-width:400px;
+margin:auto;
+}
+
+.legend div{
+margin:4px;
 }
 
 </style>
 </head>
 
-
 <body>
 
-<h2>🌫 PM2.5 Smart Health Monitoring System - Lampang</h2>
+<h2>🌫 PM2.5 Smart Health Monitoring - Lampang</h2>
 
 <div class="card">
 
 <div id="pmValue">--</div>
 
-<p id="statusText">กำลังโหลดข้อมูล...</p>
+<p id="statusText">กำลังโหลด...</p>
 
 <p id="locationText"></p>
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
-
-</div>
-
-
-<div class="card alert" id="alertBox">
-
-🚨 ค่าฝุ่นอันตราย กรุณาหลีกเลี่ยงกิจกรรมกลางแจ้ง
 
 </div>
 
@@ -120,6 +113,18 @@ font-weight:bold;
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
 
 <div id="map"></div>
+
+<div class="legend">
+
+<b>ระดับคุณภาพอากาศ</b>
+
+<div>🟢 สีเขียว (0-25) อากาศดี</div>
+<div>🟡 สีเหลือง (26-50) ปานกลาง</div>
+<div>🟠 สีส้ม (51-100) เริ่มมีผลกระทบ</div>
+<div>🔴 สีแดง (101-150) มีผลต่อสุขภาพ</div>
+<div>🟣 สีม่วง (151+) อันตรายมาก</div>
+
+</div>
 
 </div>
 
@@ -152,12 +157,13 @@ font-weight:bold;
 
 <script>
 
+const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
+
 let map
 let chart
 let markers=[]
 let userMarker=null
 let userDistrict=null
-
 
 const districts={
 
@@ -209,37 +215,78 @@ function healthAdvice(pm){
 
 if(pm<=25){
 
-return"คุณภาพอากาศดี สามารถทำกิจกรรมกลางแจ้งได้"
+return`
+อากาศอยู่ในเกณฑ์ดีมาก
+
+• สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ
+• เหมาะสำหรับการออกกำลังกาย วิ่ง หรือปั่นจักรยาน
+• เด็ก ผู้สูงอายุ และหญิงตั้งครรภ์สามารถอยู่กลางแจ้งได้
+• เปิดหน้าต่างเพื่อระบายอากาศภายในบ้านได้
+`
 
 }
 
 if(pm<=50){
 
-return"คนทั่วไปทำกิจกรรมกลางแจ้งได้ แต่กลุ่มเสี่ยงควรระวัง"
+return`
+คุณภาพอากาศอยู่ในระดับปานกลาง
+
+• คนทั่วไปสามารถทำกิจกรรมกลางแจ้งได้
+• ผู้ป่วยโรคหอบหืดหรือภูมิแพ้ควรสังเกตอาการ
+• หากมีอาการระคายเคืองตา ไอ หรือจาม ควรลดกิจกรรมกลางแจ้ง
+`
 
 }
 
 if(pm<=100){
 
-return"ควรใส่หน้ากาก N95 และลดกิจกรรมกลางแจ้ง"
+return`
+เริ่มมีผลกระทบต่อสุขภาพ
+
+• ควรสวมหน้ากาก N95 เมื่อออกนอกบ้าน
+• ลดระยะเวลาการทำกิจกรรมกลางแจ้ง
+• หลีกเลี่ยงการออกกำลังกายหนัก
+• เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรอยู่ในอาคาร
+`
 
 }
 
 if(pm<=150){
 
-return"หลีกเลี่ยงกิจกรรมกลางแจ้ง ใช้เครื่องฟอกอากาศ"
+return`
+มีผลกระทบต่อสุขภาพ
+
+• หลีกเลี่ยงกิจกรรมกลางแจ้ง
+• สวมหน้ากาก N95 ทุกครั้งเมื่อออกนอกบ้าน
+• ปิดประตูหน้าต่างเพื่อลดการเข้ามาของฝุ่น
+• ใช้เครื่องฟอกอากาศภายในบ้าน
+`
 
 }
 
-return"อันตรายมาก ควรอยู่ในอาคารและสวมหน้ากาก N95"
+return`
+อันตรายมากต่อสุขภาพ
+
+• ควรอยู่ภายในอาคาร
+• หลีกเลี่ยงการออกจากบ้าน
+• หากจำเป็นต้องออกควรใส่หน้ากาก N95
+• เด็ก ผู้สูงอายุ ผู้ป่วยโรคหัวใจ และโรคปอดควรระมัดระวังอย่างมาก
+• หากมีอาการหายใจลำบาก แน่นหน้าอก หรือเวียนศีรษะควรพบแพทย์
+`
 
 }
 
 
 
-function randomPM(){
+async function fetchPM(lat,lon){
 
-return Math.floor(Math.random()*160)
+const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
+
+const data=await res.json()
+
+let pm=data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+
+return pm
 
 }
 
@@ -266,7 +313,7 @@ for(const name in districts){
 
 let [lat,lon]=districts[name]
 
-let pm=randomPM()
+let pm=await fetchPM(lat,lon)
 
 results.push({name,pm,lat,lon})
 
@@ -291,7 +338,7 @@ let circle=L.circle([d.lat,d.lon],{
 radius:7000,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
-fillOpacity:0.5
+fillOpacity:0.6
 
 }).addTo(map)
 
@@ -303,7 +350,6 @@ markers.push(circle)
 
 document.getElementById("ranking").innerHTML=rankingHTML
 
-
 let mainPM=results[0].pm
 
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
@@ -311,16 +357,6 @@ document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 document.getElementById("statusText").innerText="ระดับอากาศ: "+levelText(mainPM)
 
 document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
-
-if(mainPM>120){
-
-document.getElementById("alertBox").style.display="block"
-
-}else{
-
-document.getElementById("alertBox").style.display="none"
-
-}
 
 loadChart(results.map(r=>r.pm))
 
@@ -366,7 +402,7 @@ let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
 document.getElementById("locationText").innerText=
-"📍 "+lat.toFixed(4)+","+lon.toFixed(4)
+"📍 ตำแหน่งปัจจุบัน: "+lat.toFixed(4)+","+lon.toFixed(4)
 
 if(userMarker)map.removeLayer(userMarker)
 
@@ -397,7 +433,7 @@ for(const name in districts){
 
 let [dlat,dlon]=districts[name]
 
-let dist=Math.hypot(lat-dlat,lon-dlon)
+let dist=Math.hypot(lat-dlat,dlon-lon)
 
 if(dist<min){
 
