@@ -12,6 +12,9 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
+<!-- Heatmap -->
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
 <style>
 
 body{
@@ -146,7 +149,6 @@ border-radius:12px;
 </div>
 
 
-
 <script>
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
@@ -156,6 +158,8 @@ let map
 let markers=[]
 let userDistrict=null
 let userMarker=null
+let heatLayer
+let sensorMarkers=[]
 
 
 const districts={
@@ -202,76 +206,43 @@ return "🚨 อันตรายมาก"
 function healthAdvice(pm){
 
 if(pm<=25){
-
-return `
-
-คุณภาพอากาศดีมาก
-• สามารถทำกิจกรรมกลางแจ้งได้
-• เหมาะสำหรับการออกกำลังกาย
-• เด็กและผู้สูงอายุทำกิจกรรมภายนอกได้
-
-`
-
+return `คุณภาพอากาศดี สามารถทำกิจกรรมกลางแจ้งได้`
 }
 
 if(pm<=50){
-
-return `
-
-คุณภาพอากาศปานกลาง
-• บุคคลทั่วไปทำกิจกรรมกลางแจ้งได้
-• ผู้ป่วยโรคหอบหืดควรระวัง
-
-`
-
+return `ควรระวังสำหรับผู้ป่วยโรคทางเดินหายใจ`
 }
 
 if(pm<=100){
-
-return `
-
-เริ่มมีผลกระทบต่อสุขภาพ
-• สวมหน้ากาก N95
-• ลดกิจกรรมกลางแจ้ง
-
-`
-
+return `ควรใส่หน้ากาก N95 และลดกิจกรรมกลางแจ้ง`
 }
 
 if(pm<=150){
+return `หลีกเลี่ยงกิจกรรมกลางแจ้ง`
+}
 
-return `
-
-มีผลกระทบต่อสุขภาพ
-• หลีกเลี่ยงกิจกรรมกลางแจ้ง
-• ใช้เครื่องฟอกอากาศ
-
-`
+return `อันตรายมากต่อสุขภาพ ควรอยู่ในอาคาร`
 
 }
 
-return `
 
-อันตรายมาก
-• หลีกเลี่ยงออกจากบ้าน
-• สวมหน้ากาก N95
+function checkAlert(pm){
 
-`
+if(pm>=150){
+alert("🚨 ค่าฝุ่นอันตรายมาก กรุณาหลีกเลี่ยงกิจกรรมกลางแจ้ง")
+}
 
 }
 
 
 function pmToAQI(pm){
-
 return Math.round(pm*4)
-
 }
 
 
 async function fetchPM(lat,lon){
 
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
-
 const data=await res.json()
 
 let pm=data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
@@ -286,6 +257,62 @@ function initMap(){
 map=L.map('map').setView([18.3,99.5],9)
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
+}
+
+
+async function loadAir4Thai(){
+
+try{
+
+const res=await fetch("https://www.air4thai.com/forweb/getAQI_JSON.php")
+const data=await res.json()
+
+sensorMarkers.forEach(m=>map.removeLayer(m))
+sensorMarkers=[]
+
+let heatData=[]
+
+data.stations.forEach(st=>{
+
+let lat=parseFloat(st.lat)
+let lon=parseFloat(st.long)
+let pm=parseFloat(st.pm25)
+
+if(!lat || !lon || !pm) return
+
+let marker=L.circleMarker([lat,lon],{
+
+radius:6,
+color:"#2d3436",
+fillColor:aqiColor(pm),
+fillOpacity:0.9
+
+}).addTo(map)
+
+.bindPopup(`${st.stationID}<br>PM2.5 : ${pm}`)
+
+sensorMarkers.push(marker)
+
+heatData.push([lat,lon,pm/150])
+
+})
+
+if(heatLayer){
+map.removeLayer(heatLayer)
+}
+
+heatLayer=L.heatLayer(heatData,{
+radius:35,
+blur:25,
+maxZoom:10
+}).addTo(map)
+
+}catch(e){
+
+console.log("Air4Thai error")
+
+}
 
 }
 
@@ -314,7 +341,6 @@ let html=""
 results.forEach((d,i)=>{
 
 let cls="rank"
-
 if(d.name===userDistrict) cls+=" highlight"
 
 html+=`<div class="${cls}">
@@ -322,11 +348,14 @@ ${i+1}. ${d.name} - ${d.pm} µg/m³
 </div>`
 
 let circle=L.circle([d.lat,d.lon],{
+
 radius:7000,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
 fillOpacity:0.5
+
 }).addTo(map)
+
 .bindPopup(d.name+"<br>"+d.pm+" µg/m³")
 
 markers.push(circle)
@@ -342,16 +371,19 @@ let mainPM=results[0].pm
 let avg=values.reduce((a,b)=>a+b)/values.length
 
 let max=Math.max(...values)
-
 let min=Math.min(...values)
 
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 document.getElementById("statusText").innerText=advice(mainPM)
 document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
+
 document.getElementById("aqiText").innerText="AQI ประมาณ: "+pmToAQI(mainPM)
+
 document.getElementById("avgText").innerText="ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)
 document.getElementById("maxText").innerText="ค่าสูงสุด: "+max
 document.getElementById("minText").innerText="ค่าต่ำสุด: "+min
+
+checkAlert(mainPM)
 
 loadChart(values)
 
@@ -368,12 +400,10 @@ document.getElementById("chart"),
 type:"bar",
 data:{
 labels:Object.keys(districts),
-datasets:[
-{
+datasets:[{
 label:"PM2.5",
 data:data
-}
-]
+}]
 }
 }
 )
@@ -401,11 +431,10 @@ userMarker=L.circleMarker([lat,lon],{
 radius:10,
 color:"#0984e3",
 fillColor:"#74b9ff",
-fillOpacity:1,
-weight:3
+fillOpacity:1
 }).addTo(map)
-.bindPopup("📍 ตำแหน่งของคุณ")
-.openPopup()
+
+.bindPopup("ตำแหน่งของคุณ")
 
 map.setView([lat,lon],12)
 
@@ -450,9 +479,7 @@ function exportCSV(){
 let csv="District,PM2.5\n"
 
 document.querySelectorAll(".rank").forEach(el=>{
-
 csv+=el.innerText.replace(" - ",",")+"\n"
-
 })
 
 let blob=new Blob([csv],{type:"text/csv"})
@@ -460,17 +487,19 @@ let blob=new Blob([csv],{type:"text/csv"})
 let a=document.createElement("a")
 
 a.href=URL.createObjectURL(blob)
-
 a.download="pm25_lampang.csv"
-
 a.click()
 
 }
 
 
 initMap()
+
 loadAll()
+loadAir4Thai()
+
 setInterval(loadAll,300000)
+setInterval(loadAir4Thai,300000)
 
 </script>
 
