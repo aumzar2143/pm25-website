@@ -35,11 +35,24 @@ padding:25px;
 border-radius:20px;
 max-width:900px;
 box-shadow:0 10px 30px rgba(0,0,0,0.25);
+animation:fadeUp 0.8s ease;
+}
+
+@keyframes fadeUp{
+from{opacity:0;transform:translateY(20px)}
+to{opacity:1;transform:translateY(0)}
 }
 
 #pmValue{
 font-size:80px;
 font-weight:bold;
+animation:pulse 2s infinite;
+}
+
+@keyframes pulse{
+0%{transform:scale(1)}
+50%{transform:scale(1.05)}
+100%{transform:scale(1)}
 }
 
 button{
@@ -49,6 +62,13 @@ border-radius:10px;
 margin:6px;
 cursor:pointer;
 font-size:15px;
+transition:0.3s;
+position:relative;
+overflow:hidden;
+}
+
+button:hover{
+transform:scale(1.05);
 }
 
 .refresh{background:#00b894;color:white;}
@@ -87,12 +107,24 @@ color:white;
 padding:10px;
 display:none;
 font-weight:bold;
+animation:blink 1.5s infinite;
+}
+
+@keyframes blink{
+0%{opacity:1}
+50%{opacity:0.4}
+100%{opacity:1}
 }
 
 .advice ul{
 text-align:left;
 max-width:600px;
 margin:auto;
+}
+
+@keyframes bounce{
+0%,100%{transform:translateY(0)}
+50%{transform:translateY(-10px)}
 }
 
 </style>
@@ -116,6 +148,7 @@ margin:auto;
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
+<button onclick="testSound()" style="background:#e17055;color:white;">🔊 ทดสอบเสียง</button>
 
 </div>
 
@@ -159,10 +192,6 @@ margin:auto;
 
 </div>
 
-<audio id="alarm">
-<source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg">
-</audio>
-
 <script>
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
@@ -171,6 +200,33 @@ let map
 let chart
 let markers=[]
 let userDistrict=null
+let userMarker=null
+let accuracyCircle=null
+
+const alarmSound=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
+
+function testSound(){
+alarmSound.play()
+}
+
+function sendNotification(pm){
+
+if(Notification.permission==="granted"){
+
+new Notification("🚨 PM2.5 สูง",{
+body:"ค่าฝุ่น "+pm+" µg/m³",
+icon:"https://cdn-icons-png.flaticon.com/512/481/481965.png"
+})
+
+}
+
+alarmSound.play()
+
+}
+
+if("Notification" in window){
+Notification.requestPermission()
+}
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -196,26 +252,17 @@ if(pm<=150)return"#e74c3c"
 return"#8e44ad"
 }
 
-function healthAdvice(pm){
+function setBackground(pm){
 
-let html="<ul>"
+let bg=""
 
-if(pm<=25){
-html+=`<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>`
-}
-else if(pm<=50){
-html+=`<li>ผู้แพ้ฝุ่นควรระวัง</li>`
-}
-else if(pm<=100){
-html+=`<li>ควรใส่หน้ากาก N95</li>`
-}
-else{
-html+=`<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง และสวมหน้ากาก</li>`
-}
+if(pm<=25)bg="linear-gradient(135deg,#2ecc71,#a8e6cf)"
+else if(pm<=50)bg="linear-gradient(135deg,#f1c40f,#ffeaa7)"
+else if(pm<=100)bg="linear-gradient(135deg,#e67e22,#fab1a0)"
+else if(pm<=150)bg="linear-gradient(135deg,#e74c3c,#ff7675)"
+else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
 
-html+="</ul>"
-return html
-
+document.body.style.background=bg
 }
 
 async function fetchPM(lat,lon){
@@ -263,10 +310,7 @@ results.forEach((d,i)=>{
 chartLabels.push(d.name)
 chartData.push(d.pm)
 
-let cls="rank"
-if(d.name===userDistrict)cls+=" highlight"
-
-rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm}</div>`
+rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 let circle=L.circle([d.lat,d.lon],{
 radius:7000,
@@ -283,16 +327,15 @@ document.getElementById("ranking").innerHTML=rankingHTML
 
 let mainPM=results[0].pm
 
-document.getElementById("pmValue").innerText=mainPM
+document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+
 document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
 
-document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
+setBackground(mainPM)
 
 if(mainPM>100){
-
 document.getElementById("alertBox").style.display="block"
-document.getElementById("alarm").play()
-
+sendNotification(mainPM)
 }
 
 loadChart(chartLabels,chartData)
@@ -303,10 +346,10 @@ function loadChart(labels,data){
 
 if(chart)chart.destroy()
 
-chart=new Chart(document.getElementById("chart"),{
-
+chart=new Chart(
+document.getElementById("chart"),
+{
 type:"bar",
-
 data:{
 labels:labels,
 datasets:[{
@@ -314,8 +357,8 @@ label:"PM2.5",
 data:data
 }]
 }
-
-})
+}
+)
 
 }
 
@@ -326,11 +369,11 @@ navigator.geolocation.getCurrentPosition(pos=>{
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
+map.setView([lat,lon],13)
+
 L.marker([lat,lon]).addTo(map)
 .bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
-
-map.setView([lat,lon],13)
 
 })
 
