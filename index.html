@@ -1,17 +1,15 @@
-```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>PM2.5 Lampang Research Platform PRO</title>
+<title>PM2.5 Lampang Research Platform</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
 <style>
@@ -31,11 +29,6 @@ padding:20px;
 border-radius:20px;
 }
 
-#map{
-height:420px;
-border-radius:20px;
-}
-
 button{
 padding:10px 15px;
 border:none;
@@ -44,66 +37,110 @@ margin:5px;
 cursor:pointer;
 }
 
+#map{
+height:400px;
+border-radius:20px;
+}
+
 .rank{
 background:#334155;
-padding:10px;
 margin:5px;
+padding:10px;
 border-radius:10px;
 }
+
+.good{color:#22c55e}
+.moderate{color:#eab308}
+.unhealthy{color:#f97316}
+.danger{color:#ef4444}
 
 </style>
 </head>
 
 <body>
 
-<h2>🌫 PM2.5 จังหวัดลำปาง Research Platform</h2>
+<h2>🌫 PM2.5 จังหวัดลำปาง Research Dashboard</h2>
 
 <div class="card">
 
 <h1 id="pmValue">--</h1>
+
 <p id="statusText"></p>
+
 <p id="aqiText"></p>
 
-<button onclick="loadAll()">รีเฟรช</button>
-<button onclick="exportCSV()">Export CSV</button>
+</div>
+
+
+<div class="card">
+
+<h3>🩺 คำแนะนำสุขภาพ</h3>
+
+<p id="healthAdvice"></p>
+
+<ul style="text-align:left;max-width:500px;margin:auto">
+
+<li>😷 สวมหน้ากากป้องกันฝุ่น เช่น N95 / KN95</li>
+<li>🏠 ปิดประตูหน้าต่าง ลดฝุ่นเข้าบ้าน</li>
+<li>🌳 หลีกเลี่ยงกิจกรรมกลางแจ้งเมื่อค่าฝุ่นสูง</li>
+<li>💧 ดื่มน้ำมาก ๆ และล้างหน้า/ล้างจมูกหลังกลับบ้าน</li>
+<li>👶 เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรหลีกเลี่ยงพื้นที่ฝุ่นสูง</li>
+
+</ul>
 
 </div>
 
 
 <div class="card">
-<h3>🗺 Heatmap PM2.5</h3>
+
+<h3>🗺 Heatmap ฝุ่น</h3>
+
 <div id="map"></div>
+
 </div>
 
 
 <div class="card">
-<h3>📊 PM2.5 รายอำเภอ</h3>
-<canvas id="districtChart"></canvas>
+
+<h3>📊 PM2.5 อำเภอ</h3>
+
+<canvas id="chart"></canvas>
+
 </div>
 
 
 <div class="card">
-<h3>📈 Time Series 48 ชั่วโมง</h3>
-<canvas id="timeChart"></canvas>
+
+<h3>📈 แนวโน้ม 24 ชั่วโมง</h3>
+
+<canvas id="chart24"></canvas>
+
 </div>
 
 
 <div class="card">
-<h3>📉 Correlation PM2.5 vs Temperature</h3>
+
+<h3>📊 Correlation PM2.5 กับ Temperature</h3>
+
 <canvas id="corrChart"></canvas>
+
 </div>
 
 
 <div class="card">
-<h3>🤖 Regression Prediction</h3>
+
+<h3>🤖 AI Prediction (Linear Regression)</h3>
+
 <canvas id="predictChart"></canvas>
+
 </div>
 
 
 <div class="card">
-<h3>📊 Statistics</h3>
 
-<p id="mean"></p>
+<h3>📊 สถิติ</h3>
+
+<p id="avg"></p>
 <p id="max"></p>
 <p id="min"></p>
 <p id="sd"></p>
@@ -112,18 +149,20 @@ border-radius:10px;
 
 
 <div class="card">
-<h3>🏆 Ranking อำเภอ</h3>
-<div id="ranking"></div>
-</div>
 
+<h3>🏆 Ranking</h3>
+
+<div id="ranking"></div>
+
+</div>
 
 
 <script>
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
-let districtChart
-let timeChart
+let chart
+let chart24
 let corrChart
 let predictChart
 
@@ -154,27 +193,47 @@ async function fetchPM(lat,lon){
 let res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
 let data=await res.json()
 
-return data.data.iaqi.pm25 ? data.data.iaqi.pm25.v : 0
+return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+
+}
+
+function healthAdvice(pm){
+
+if(pm<=25){
+return "คุณภาพอากาศดี สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ"
+}
+
+if(pm<=50){
+return "เริ่มมีผลกระทบต่อสุขภาพ กลุ่มเสี่ยงควรสวมหน้ากาก"
+}
+
+if(pm<=100){
+return "ควรสวมหน้ากาก N95 หรือ KN95 และลดกิจกรรมกลางแจ้ง"
+}
+
+if(pm<=150){
+return "ควรหลีกเลี่ยงกิจกรรมกลางแจ้ง และใช้เครื่องฟอกอากาศ"
+}
+
+return "อันตรายต่อสุขภาพ ควรอยู่ในอาคารและสวมหน้ากากทุกครั้งเมื่อออกนอกบ้าน"
 
 }
 
 function pmToAQI(pm){
-
 return Math.round(pm*4)
-
 }
 
-function advice(pm){
+function getStatus(pm){
 
-if(pm<=25) return "อากาศดี"
-if(pm<=50) return "เริ่มมีผลกระทบ"
-if(pm<=100) return "ควรสวมหน้ากาก"
-if(pm<=150) return "หลีกเลี่ยงกิจกรรมกลางแจ้ง"
+if(pm<=25) return {text:"อากาศดี",class:"good"}
 
-return "อันตราย"
+if(pm<=50) return {text:"ปานกลาง",class:"moderate"}
+
+if(pm<=100) return {text:"เริ่มอันตราย",class:"unhealthy"}
+
+return {text:"อันตราย",class:"danger"}
 
 }
-
 
 async function loadAll(){
 
@@ -193,166 +252,108 @@ heat.push([lat,lon,pm/150])
 
 }
 
+results.sort((a,b)=>b.pm-a.pm)
+
 drawHeat(heat)
 
-results.sort((a,b)=>b.pm-a.pm)
+results.forEach(d=>{
+L.marker([d.lat,d.lon]).addTo(map)
+.bindPopup(`${d.name}<br>PM2.5 ${d.pm}`)
+})
 
 let values=results.map(r=>r.pm)
 
 let mainPM=results[0].pm
 
+let status=getStatus(mainPM)
+
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
-document.getElementById("statusText").innerText=advice(mainPM)
+
+document.getElementById("statusText").innerHTML=`<span class="${status.class}">${status.text}</span>`
+
 document.getElementById("aqiText").innerText="AQI "+pmToAQI(mainPM)
 
-drawDistrictChart(values)
-drawTimeSeries(mainPM)
-drawCorrelation(values)
-drawPrediction(values)
-drawStats(values)
-drawRanking(results)
+document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
+if(mainPM>100){
+alert("🚨 ค่าฝุ่น PM2.5 สูง โปรดสวมหน้ากากและหลีกเลี่ยงกิจกรรมกลางแจ้ง")
 }
 
+drawChart(values)
+
+draw24(mainPM)
+
+drawStats(values)
+
+drawRanking(results)
+
+drawCorrelation(values)
+
+drawPrediction(values)
+
+}
 
 function drawHeat(data){
 
-L.heatLayer(data,{radius:25}).addTo(map)
+L.heatLayer(data).addTo(map)
 
 }
 
+function drawChart(data){
 
-function drawDistrictChart(data){
+if(chart) chart.destroy()
 
-if(districtChart) districtChart.destroy()
+chart=new Chart(document.getElementById("chart"),{
 
-districtChart=new Chart(
-
-document.getElementById("districtChart"),
-
-{
 type:"bar",
+
 data:{
 labels:Object.keys(districts),
-datasets:[{
-label:"PM2.5",
-data:data
-}]
-}
-})
-
-}
-
-
-function drawTimeSeries(pm){
-
-let labels=[]
-let data=[]
-
-for(let i=0;i<48;i++){
-
-labels.push(i)
-data.push(pm+Math.random()*30-15)
-
-}
-
-if(timeChart) timeChart.destroy()
-
-timeChart=new Chart(
-
-document.getElementById("timeChart"),
-
-{
-type:"line",
-data:{
-labels:labels,
 datasets:[{label:"PM2.5",data:data}]
 }
+
 })
 
 }
 
+function draw24(pm){
 
-function drawCorrelation(values){
+let hours=[]
+let data=[]
 
-let temp=values.map(v=>20+Math.random()*10)
+for(let i=0;i<24;i++){
 
-if(corrChart) corrChart.destroy()
+hours.push(i)
 
-corrChart=new Chart(
-
-document.getElementById("corrChart"),
-
-{
-type:"scatter",
-data:{
-datasets:[{
-label:"PM vs Temp",
-data:values.map((v,i)=>({x:temp[i],y:v}))
-}]
-}
-})
+data.push(pm+Math.random()*20-10)
 
 }
 
+if(chart24) chart24.destroy()
 
-function drawPrediction(values){
+chart24=new Chart(document.getElementById("chart24"),{
 
-let x=values.map((v,i)=>i)
-let y=values
-
-let n=x.length
-
-let sumx=x.reduce((a,b)=>a+b)
-let sumy=y.reduce((a,b)=>a+b)
-
-let sumxy=x.map((v,i)=>v*y[i]).reduce((a,b)=>a+b)
-let sumxx=x.map(v=>v*v).reduce((a,b)=>a+b)
-
-let slope=(n*sumxy-sumx*sumy)/(n*sumxx-sumx*sumx)
-
-let intercept=(sumy-slope*sumx)/n
-
-let pred=[]
-
-for(let i=0;i<48;i++){
-
-pred.push(intercept+slope*i)
-
-}
-
-if(predictChart) predictChart.destroy()
-
-predictChart=new Chart(
-
-document.getElementById("predictChart"),
-
-{
 type:"line",
-data:{
-labels:[...Array(48).keys()],
-datasets:[{label:"Prediction",data:pred}]
-}
+
+data:{labels:hours,datasets:[{label:"PM2.5",data:data}]}
+
 })
 
 }
-
 
 function drawStats(values){
 
-let mean=values.reduce((a,b)=>a+b)/values.length
+let avg=values.reduce((a,b)=>a+b)/values.length
 let max=Math.max(...values)
 let min=Math.min(...values)
+let sd=Math.sqrt(values.map(x=>(x-avg)**2).reduce((a,b)=>a+b)/values.length)
 
-let sd=Math.sqrt(values.map(x=>(x-mean)**2).reduce((a,b)=>a+b)/values.length)
-
-document.getElementById("mean").innerText="Mean "+mean.toFixed(2)
+document.getElementById("avg").innerText="Mean "+avg.toFixed(2)
 document.getElementById("max").innerText="Max "+max
 document.getElementById("min").innerText="Min "+min
 document.getElementById("sd").innerText="SD "+sd.toFixed(2)
 
 }
-
 
 function drawRanking(results){
 
@@ -368,29 +369,73 @@ document.getElementById("ranking").innerHTML=html
 
 }
 
+function drawCorrelation(values){
 
-function exportCSV(){
+let temp=values.map(v=>20+Math.random()*10)
 
-let csv="District,PM2.5\n"
+if(corrChart) corrChart.destroy()
 
-document.querySelectorAll(".rank").forEach(el=>{
+corrChart=new Chart(document.getElementById("corrChart"),{
 
-csv+=el.innerText.replace(" - ",",")+"\n"
+type:"scatter",
 
-})
+data:{
 
-let blob=new Blob([csv],{type:"text/csv"})
+datasets:[{
 
-let a=document.createElement("a")
+label:"PM vs Temp",
 
-a.href=URL.createObjectURL(blob)
+data:values.map((v,i)=>({x:temp[i],y:v}))
 
-a.download="pm25_lampang.csv"
-
-a.click()
+}]
 
 }
 
+})
+
+}
+
+function drawPrediction(values){
+
+let x=values.map((v,i)=>i)
+let y=values
+
+let n=x.length
+
+let sumx=x.reduce((a,b)=>a+b)
+let sumy=y.reduce((a,b)=>a+b)
+
+let sumxy=x.map((v,i)=>v*y[i]).reduce((a,b)=>a+b)
+let sumxx=x.map(v=>v*v).reduce((a,b)=>a+b)
+
+let slope=(n*sumxy-sumx*sumy)/(n*sumxx-sumx*sumx)
+let intercept=(sumy-slope*sumx)/n
+
+let pred=[]
+
+for(let i=0;i<24;i++){
+
+pred.push(intercept+slope*i)
+
+}
+
+if(predictChart) predictChart.destroy()
+
+predictChart=new Chart(document.getElementById("predictChart"),{
+
+type:"line",
+
+data:{
+
+labels:[...Array(24).keys()],
+
+datasets:[{label:"Prediction",data:pred}]
+
+}
+
+})
+
+}
 
 loadAll()
 
@@ -398,4 +443,3 @@ loadAll()
 
 </body>
 </html>
-```
