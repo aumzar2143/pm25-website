@@ -35,7 +35,7 @@ padding:25px;
 border-radius:20px;
 max-width:900px;
 box-shadow:0 10px 30px rgba(0,0,0,0.25);
-animation:fadeUp 0.8s ease;
+animation:fadeUp .8s ease;
 }
 
 @keyframes fadeUp{
@@ -63,35 +63,14 @@ margin:6px;
 cursor:pointer;
 font-size:15px;
 transition:0.3s;
-position:relative;
-overflow:hidden;
 }
 
 button:hover{
 transform:scale(1.05);
 }
 
-button:after{
-content:"";
-position:absolute;
-background:rgba(255,255,255,0.4);
-width:0;
-height:0;
-border-radius:50%;
-transform:translate(-50%,-50%);
-opacity:0;
-}
-
-button:active:after{
-width:200px;
-height:200px;
-opacity:1;
-transition:0s;
-}
-
 .refresh{background:#00b894;color:white;}
 .gps{background:#0984e3;color:white;}
-.export{background:#fdcb6e;}
 
 .rank{
 background:#f1f5f9;
@@ -116,10 +95,6 @@ max-width:420px;
 margin:auto;
 }
 
-canvas{
-max-height:320px;
-}
-
 .alert{
 background:#ff4d4d;
 color:white;
@@ -131,19 +106,19 @@ animation:blink 1.5s infinite;
 
 @keyframes blink{
 0%{opacity:1}
-50%{opacity:0.4}
+50%{opacity:.4}
 100%{opacity:1}
+}
+
+@keyframes bounce{
+0%,100%{transform:translateY(0)}
+50%{transform:translateY(-10px)}
 }
 
 .advice ul{
 text-align:left;
 max-width:600px;
 margin:auto;
-}
-
-@keyframes bounce{
-0%,100%{transform:translateY(0)}
-50%{transform:translateY(-10px)}
 }
 
 </style>
@@ -182,18 +157,6 @@ margin:auto;
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
 <div id="map"></div>
 
-<div class="legend">
-
-<b>ระดับคุณภาพอากาศ</b>
-
-<div>🟢 0-25 อากาศดี</div>
-<div>🟡 26-50 ปานกลาง</div>
-<div>🟠 51-100 เริ่มมีผลกระทบ</div>
-<div>🔴 101-150 มีผลต่อสุขภาพ</div>
-<div>🟣 151+ อันตรายมาก</div>
-
-</div>
-
 </div>
 
 <div class="card">
@@ -217,7 +180,6 @@ const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 let map
 let chart
 let markers=[]
-let userDistrict=null
 let userMarker=null
 
 const districts={
@@ -262,31 +224,18 @@ function healthAdvice(pm){
 let html="<ul>"
 
 if(pm<=25){
-html+=`
-<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
-<li>เหมาะสำหรับออกกำลังกาย</li>
-<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>`
+html+=`<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
+<li>เหมาะสำหรับออกกำลังกาย</li>`
 }
-else if(pm<=50){
-html+=`
-<li>ทำกิจกรรมกลางแจ้งได้</li>
-<li>ผู้แพ้ฝุ่นควรระวัง</li>
-<li>ดื่มน้ำมากขึ้น</li>`
-}
+
 else if(pm<=100){
-html+=`
-<li>ควรใส่หน้ากาก N95</li>
-<li>ลดกิจกรรมกลางแจ้ง</li>
-<li>ปิดหน้าต่างบ้าน</li>
-<li>ใช้เครื่องฟอกอากาศ</li>`
+html+=`<li>ควรใส่หน้ากาก N95</li>
+<li>ลดกิจกรรมกลางแจ้ง</li>`
 }
+
 else{
-html+=`
-<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
-<li>สวมหน้ากาก N95</li>
-<li>อยู่ในอาคาร</li>
-<li>ใช้เครื่องฟอกอากาศ</li>
-<li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>`
+html+=`<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
+<li>สวมหน้ากาก N95</li>`
 }
 
 html+="</ul>"
@@ -332,7 +281,12 @@ el.innerText=start+" µg/m³"
 
 async function loadAll(){
 
-markers.forEach(m=>map.removeLayer(m))
+markers.forEach(m=>{
+if(m!==userMarker){
+map.removeLayer(m)
+}
+})
+
 markers=[]
 
 let results=[]
@@ -353,10 +307,7 @@ let rankingHTML=""
 
 results.forEach((d,i)=>{
 
-let cls="rank"
-if(d.name===userDistrict)cls+=" highlight"
-
-rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
+rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 let circle=L.circle([d.lat,d.lon],{
 radius:7000,
@@ -364,7 +315,6 @@ color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
 fillOpacity:0.6
 }).addTo(map)
-.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}`)
 
 markers.push(circle)
 
@@ -417,10 +367,12 @@ navigator.geolocation.getCurrentPosition(async pos=>{
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
-if(userMarker)map.removeLayer(userMarker)
+if(userMarker){
+map.removeLayer(userMarker)
+}
 
 userMarker=L.marker([lat,lon]).addTo(map)
-.bindPopup("ตำแหน่งของคุณ")
+.bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
 
 let icon=userMarker._icon
