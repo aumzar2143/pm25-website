@@ -1,152 +1,105 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>PM2.5 Lampang Research AI Dashboard</title>
+<title>PM2.5 ลำปาง Research Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
 <style>
-
 body{
 margin:0;
 font-family:system-ui;
-background:#0f172a;
 color:white;
 text-align:center;
+transition:0.4s;
 }
 
 .card{
-background:#1e293b;
+background:rgba(0,0,0,0.8);
 margin:15px;
 padding:20px;
 border-radius:20px;
 }
 
-#map{
-height:420px;
-border-radius:20px;
+button{
+padding:10px 15px;
+border:none;
+border-radius:10px;
+margin:5px;
+font-size:14px;
+cursor:pointer;
 }
 
+.refresh{background:#00c853;color:white;}
+.gps{background:#2962ff;color:white;}
+.export{background:#ffc107;color:black;}
+
 .rank{
-background:#334155;
-margin:6px;
+background:#1a1a1a;
+margin:5px;
 padding:10px;
 border-radius:10px;
 }
 
-.good{color:#22c55e}
-.mid{color:#eab308}
-.bad{color:#f97316}
-.danger{color:#ef4444}
-
+.highlight{
+border:2px solid white;
+}
 </style>
-
 </head>
 
 <body>
 
-<h2>🌫 PM2.5 จังหวัดลำปาง Research AI Dashboard</h2>
+<h2>👑 PM2.5 จังหวัดลำปาง</h2>
 
 <div class="card">
 
 <h1 id="pmValue">--</h1>
+<p id="statusText">กำลังโหลด...</p>
+<p id="locationText"></p>
+<p id="aqiText"></p>
 
-<p id="status"></p>
-
-<p id="aqi"></p>
-
-</div>
-
-
-<div class="card">
-
-<h3>🩺 คำแนะนำสุขภาพ</h3>
-
-<p id="health"></p>
+<button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
+<button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
 
 </div>
 
 
 <div class="card">
 
-<h3>🗺 แผนที่ฝุ่น + Heatmap</h3>
+<h3>🩺 คำแนะนำการป้องกันฝุ่น</h3>
 
-<div id="map"></div>
+<p id="healthAdvice">กำลังโหลด...</p>
 
 </div>
 
 
 <div class="card">
 
-<h3>📊 PM2.5 รายอำเภอ</h3>
+<h3>📊 แนวโน้มฝุ่นในอำเภอ</h3>
 
 <canvas id="chart"></canvas>
 
-</div>
-
-
-<div class="card">
-
-<h3>📈 แนวโน้ม 24 ชั่วโมง</h3>
-
-<canvas id="chart24"></canvas>
+<p id="avgText"></p>
+<p id="maxText"></p>
+<p id="minText"></p>
 
 </div>
 
 
 <div class="card">
 
-<h3>🌬 PM2.5 vs Wind</h3>
-
-<canvas id="windChart"></canvas>
-
-</div>
-
-
-<div class="card">
-
-<h3>🌡 PM2.5 vs Temperature</h3>
-
-<canvas id="tempChart"></canvas>
-
-</div>
-
-
-<div class="card">
-
-<h3>🤖 AI Prediction 72 ชั่วโมง</h3>
-
-<canvas id="predict"></canvas>
-
-</div>
-
-
-<div class="card">
-
-<h3>📊 สถิติ</h3>
-
-<p id="mean"></p>
-<p id="max"></p>
-<p id="min"></p>
-<p id="sd"></p>
-
-</div>
-
-
-<div class="card">
-
-<h3>🏆 Ranking</h3>
+<h3>🏆 อันดับอำเภอในลำปาง</h3>
 
 <div id="ranking"></div>
+
+</div>
+
+
+<div class="card">
+
+<button class="export" onclick="exportCSV()">📥 Export CSV</button>
 
 </div>
 
@@ -156,14 +109,7 @@ border-radius:10px;
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
 let chart
-let chart24
-let windChart
-let tempChart
-let predictChart
-
-let map=L.map("map").setView([18.3,99.5],8)
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map)
+let userDistrict=null
 
 
 const districts={
@@ -185,43 +131,116 @@ const districts={
 }
 
 
-async function fetchPM(lat,lon){
+function setBG(pm){
 
-let res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
+if(pm<=25) document.body.style.background="#2e7d32"
 
-let data=await res.json()
+else if(pm<=50) document.body.style.background="#f9a825"
 
-return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+else if(pm<=100) document.body.style.background="#ef6c00"
+
+else if(pm<=150) document.body.style.background="#c62828"
+
+else document.body.style.background="#6a1b9a"
 
 }
 
 
 function advice(pm){
 
-if(pm<=25) return {text:"อากาศดี",c:"good"}
+if(pm<=25) return "🟢 อากาศดี"
 
-if(pm<=50) return {text:"เริ่มมีผลกระทบ",c:"mid"}
+if(pm<=50) return "🟡 เริ่มมีผลกระทบ"
 
-if(pm<=100) return {text:"ควรใส่หน้ากาก",c:"bad"}
+if(pm<=100) return "🟠 ควรใส่หน้ากาก N95"
 
-return {text:"อันตรายต่อสุขภาพ",c:"danger"}
+if(pm<=150) return "🔴 หลีกเลี่ยงกิจกรรมกลางแจ้ง"
+
+return "🟣 อันตรายมาก"
 
 }
 
 
 function healthAdvice(pm){
 
-if(pm<=25) return "ทำกิจกรรมกลางแจ้งได้ตามปกติ"
+if(pm<=25){
 
-if(pm<=50) return "กลุ่มเสี่ยงควรสวมหน้ากาก"
+return `
 
-if(pm<=100) return "สวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง"
+อากาศอยู่ในเกณฑ์ดี
 
-if(pm<=150) return "หลีกเลี่ยงกิจกรรมกลางแจ้ง"
+• สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ
 
-return "ควรอยู่ในอาคารและใช้เครื่องฟอกอากาศ"
+• กลุ่มเสี่ยงควรติดตามคุณภาพอากาศ
+
+`
 
 }
+
+
+if(pm<=50){
+
+return `
+
+เริ่มมีผลกระทบต่อสุขภาพบางกลุ่ม
+
+• ผู้ป่วยโรคปอดและโรคหัวใจควรระวัง
+
+• หากออกนอกบ้านควรสวมหน้ากาก
+
+`
+
+}
+
+
+if(pm<=100){
+
+return `
+
+มีผลกระทบต่อสุขภาพ
+
+• ควรสวมหน้ากาก N95
+
+• ลดระยะเวลาทำกิจกรรมกลางแจ้ง
+
+• กลุ่มเสี่ยงควรหลีกเลี่ยงกิจกรรมกลางแจ้ง
+
+`
+
+}
+
+
+if(pm<=150){
+
+return `
+
+เริ่มมีผลกระทบต่อสุขภาพมาก
+
+• สวมหน้ากาก N95 ทุกครั้ง
+
+• หลีกเลี่ยงกิจกรรมกลางแจ้ง
+
+• ปิดประตูหน้าต่างบ้าน
+
+`
+
+}
+
+
+return `
+
+อันตรายต่อสุขภาพอย่างมาก
+
+• หลีกเลี่ยงการออกจากบ้าน
+
+• กลุ่มเสี่ยงควรอยู่ในอาคาร
+
+• ใช้เครื่องฟอกอากาศ
+
+`
+
+}
+
 
 
 function pmToAQI(pm){
@@ -231,206 +250,63 @@ return Math.round(pm*4)
 }
 
 
+
+async function fetchPM(lat,lon){
+
+const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
+
+const data=await res.json()
+
+return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+
+}
+
+
+
 async function loadAll(){
 
 let results=[]
-let heat=[]
 
-for(let name in districts){
+for(const name in districts){
 
 let [lat,lon]=districts[name]
 
 let pm=await fetchPM(lat,lon)
 
-results.push({name,pm,lat,lon})
-
-heat.push([lat,lon,pm/150])
+results.push({name,pm})
 
 }
 
 
 results.sort((a,b)=>b.pm-a.pm)
 
-drawHeat(heat)
 
-results.forEach(d=>{
+let html=""
 
-L.marker([d.lat,d.lon]).addTo(map)
 
-.bindPopup(`${d.name}<br>PM2.5 ${d.pm}`)
+results.forEach((d,i)=>{
+
+let cls="rank"
+
+if(d.name===userDistrict) cls+=" highlight"
+
+
+html+=`<div class="${cls}">
+
+${i+1}. ${d.name} - ${d.pm} µg/m³
+
+</div>`
 
 })
+
+
+document.getElementById("ranking").innerHTML=html
 
 
 let values=results.map(r=>r.pm)
 
+
 let mainPM=results[0].pm
-
-let s=advice(mainPM)
-
-
-document.getElementById("pmValue").innerText=mainPM+" µg/m³"
-
-document.getElementById("status").innerHTML=`<span class="${s.c}">${s.text}</span>`
-
-document.getElementById("aqi").innerText="AQI "+pmToAQI(mainPM)
-
-document.getElementById("health").innerText=healthAdvice(mainPM)
-
-
-drawChart(values)
-
-drawTrend(mainPM)
-
-drawWind(values)
-
-drawTemp(values)
-
-drawStats(values)
-
-drawRanking(results)
-
-drawPrediction(values)
-
-}
-
-
-
-function drawHeat(data){
-
-L.heatLayer(data).addTo(map)
-
-}
-
-
-function drawChart(data){
-
-if(chart) chart.destroy()
-
-chart=new Chart(
-
-document.getElementById("chart"),
-
-{
-
-type:"bar",
-
-data:{
-
-labels:Object.keys(districts),
-
-datasets:[{
-
-label:"PM2.5",
-
-data:data
-
-}]
-
-}
-
-})
-
-}
-
-
-
-function drawTrend(pm){
-
-let hours=[]
-let data=[]
-
-for(let i=0;i<24;i++){
-
-hours.push(i)
-
-data.push(pm+Math.random()*20-10)
-
-}
-
-if(chart24) chart24.destroy()
-
-chart24=new Chart(
-
-document.getElementById("chart24"),
-
-{
-
-type:"line",
-
-data:{labels:hours,datasets:[{label:"PM2.5",data:data}]}
-
-})
-
-}
-
-
-
-function drawWind(values){
-
-let wind=values.map(v=>Math.random()*10)
-
-if(windChart) windChart.destroy()
-
-windChart=new Chart(
-
-document.getElementById("windChart"),
-
-{
-
-type:"scatter",
-
-data:{
-
-datasets:[{
-
-label:"Wind vs PM",
-
-data:values.map((v,i)=>({x:wind[i],y:v}))
-
-}]
-
-}
-
-})
-
-}
-
-
-
-function drawTemp(values){
-
-let temp=values.map(v=>20+Math.random()*10)
-
-if(tempChart) tempChart.destroy()
-
-tempChart=new Chart(
-
-document.getElementById("tempChart"),
-
-{
-
-type:"scatter",
-
-data:{
-
-datasets:[{
-
-label:"Temp vs PM",
-
-data:values.map((v,i)=>({x:temp[i],y:v}))
-
-}]
-
-}
-
-})
-
-}
-
-
-
-function drawStats(values){
 
 let avg=values.reduce((a,b)=>a+b)/values.length
 
@@ -438,69 +314,39 @@ let max=Math.max(...values)
 
 let min=Math.min(...values)
 
-let sd=Math.sqrt(values.map(x=>(x-avg)**2).reduce((a,b)=>a+b)/values.length)
 
-document.getElementById("mean").innerText="Mean "+avg.toFixed(2)
+document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 
-document.getElementById("max").innerText="Max "+max
+document.getElementById("statusText").innerText=advice(mainPM)
 
-document.getElementById("min").innerText="Min "+min
+document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
-document.getElementById("sd").innerText="SD "+sd.toFixed(2)
+document.getElementById("aqiText").innerText="AQI ประมาณ: "+pmToAQI(mainPM)
 
-}
+document.getElementById("avgText").innerText="ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)
+
+document.getElementById("maxText").innerText="ค่าสูงสุด: "+max
+
+document.getElementById("minText").innerText="ค่าต่ำสุด: "+min
 
 
+setBG(mainPM)
 
-function drawRanking(results){
 
-let html=""
-
-results.forEach((d,i)=>{
-
-html+=`<div class="rank">${i+1}. ${d.name} - ${d.pm}</div>`
-
-})
-
-document.getElementById("ranking").innerHTML=html
+loadChart(values)
 
 }
 
 
 
-function drawPrediction(values){
+function loadChart(data){
 
-let x=values.map((v,i)=>i)
+if(chart) chart.destroy()
 
-let y=values
 
-let n=x.length
+chart=new Chart(
 
-let sumx=x.reduce((a,b)=>a+b)
-
-let sumy=y.reduce((a,b)=>a+b)
-
-let sumxy=x.map((v,i)=>v*y[i]).reduce((a,b)=>a+b)
-
-let sumxx=x.map(v=>v*v).reduce((a,b)=>a+b)
-
-let slope=(n*sumxy-sumx*sumy)/(n*sumxx-sumx*sumx)
-
-let intercept=(sumy-slope*sumx)/n
-
-let pred=[]
-
-for(let i=0;i<72;i++){
-
-pred.push(intercept+slope*i)
-
-}
-
-if(predictChart) predictChart.destroy()
-
-predictChart=new Chart(
-
-document.getElementById("predict"),
+document.getElementById("chart"),
 
 {
 
@@ -508,19 +354,115 @@ type:"line",
 
 data:{
 
-labels:[...Array(72).keys()],
+labels:Object.keys(districts),
 
-datasets:[{
+datasets:[
 
-label:"AI Prediction",
+{
 
-data:pred
+label:"PM2.5",
 
-}]
+data:data
 
 }
 
+]
+
+}
+
+}
+
+)
+
+}
+
+
+
+function useGPS(){
+
+navigator.geolocation.getCurrentPosition(
+
+async pos=>{
+
+let lat=pos.coords.latitude
+
+let lon=pos.coords.longitude
+
+
+document.getElementById("locationText").innerText=
+
+"📍 พิกัด: "+lat.toFixed(4)+","+lon.toFixed(4)
+
+
+userDistrict=findClosest(lat,lon)
+
+
+loadAll()
+
+}
+
+)
+
+}
+
+
+
+function findClosest(lat,lon){
+
+let min=999999
+
+let closest=null
+
+
+for(const name in districts){
+
+let [dlat,dlon]=districts[name]
+
+
+let dist=Math.hypot(lat-dlat,lon-dlon)
+
+
+if(dist<min){
+
+min=dist
+
+closest=name
+
+}
+
+}
+
+
+return closest
+
+}
+
+
+
+function exportCSV(){
+
+let csv="District,PM2.5\n"
+
+
+document.querySelectorAll(".rank").forEach(el=>{
+
+csv+=el.innerText.replace(" - ",",")+"\n"
+
 })
+
+
+let blob=new Blob([csv],{type:"text/csv"})
+
+
+let a=document.createElement("a")
+
+
+a.href=URL.createObjectURL(blob)
+
+a.download="pm25_lampang.csv"
+
+
+a.click()
 
 }
 
@@ -530,5 +472,4 @@ loadAll()
 </script>
 
 </body>
-
 </html>
