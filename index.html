@@ -193,6 +193,8 @@ margin:auto;
 
 <script>
 
+const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
+
 let map
 let chart
 let markers=[]
@@ -217,6 +219,7 @@ const districts={
 }
 
 function findDistrict(lat,lon){
+
 let minDist=999
 let closest=null
 
@@ -297,41 +300,10 @@ return html
 
 async function fetchPM(lat,lon){
 
-try{
-
-const res=await fetch("https://air4thai.pcd.go.th/services/getNewAQI_JSON.php")
+const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
 const data=await res.json()
 
-let nearest=999
-let pm=0
-
-data.stations.forEach(s=>{
-
-let d=Math.sqrt(
-Math.pow(lat-parseFloat(s.lat),2)+
-Math.pow(lon-parseFloat(s.long),2)
-)
-
-if(d<nearest){
-
-nearest=d
-
-if(s.LastUpdate && s.LastUpdate.PM25){
-pm=parseFloat(s.LastUpdate.PM25.value)
-}
-
-}
-
-})
-
-return pm
-
-}catch(e){
-
-console.log(e)
-return 0
-
-}
+return data.data.iaqi.pm25 ? data.data.iaqi.pm25.v : 0
 
 }
 
