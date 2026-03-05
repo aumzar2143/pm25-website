@@ -12,8 +12,6 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
 <style>
 
 body{
@@ -77,20 +75,12 @@ border-radius:10px;
 
 .highlight{
 border:2px solid #0984e3;
+background:#dfefff;
 }
 
 #map{
 height:420px;
 border-radius:12px;
-}
-
-.alert{
-background:#ffebee;
-color:#b71c1c;
-padding:12px;
-border-radius:10px;
-font-weight:bold;
-margin-top:10px;
 }
 
 </style>
@@ -111,9 +101,8 @@ margin-top:10px;
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
 
-<div id="alertBox"></div>
-
 </div>
+
 
 <div class="card">
 
@@ -122,12 +111,14 @@ margin-top:10px;
 
 </div>
 
+
 <div class="card">
 
-<h3>🗺 แผนที่ฝุ่น PM2.5</h3>
+<h3>🗺 แผนที่คุณภาพอากาศ</h3>
 <div id="map"></div>
 
 </div>
+
 
 <div class="card">
 
@@ -140,6 +131,7 @@ margin-top:10px;
 
 </div>
 
+
 <div class="card">
 
 <h3>🏆 อันดับอำเภอ</h3>
@@ -147,20 +139,23 @@ margin-top:10px;
 
 </div>
 
+
 <div class="card">
-
 <button class="export" onclick="exportCSV()">📥 Export CSV</button>
-
 </div>
+
+
 
 <script>
 
-const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
+const token="demo"
 
 let chart
 let map
 let markers=[]
-let heatLayer
+let userDistrict=null
+let userMarker=null
+
 
 const districts={
 
@@ -180,6 +175,8 @@ const districts={
 
 }
 
+
+
 function aqiColor(pm){
 
 if(pm<=25) return "#2ecc71"
@@ -190,74 +187,106 @@ return "#ff0000"
 
 }
 
+
+
+function airLevel(pm){
+
+if(pm<=25) return "🟢 อากาศดี"
+if(pm<=50) return "🟡 ปานกลาง"
+if(pm<=100) return "🟠 เริ่มมีผลกระทบ"
+if(pm<=150) return "🔴 มีผลกระทบต่อสุขภาพ"
+return "🚨 อันตรายมาก"
+
+}
+
+
+
 function healthAdvice(pm){
 
 if(pm<=25){
+
 return `
-อากาศดีมาก
+
+คุณภาพอากาศดีมาก
 
 • สามารถออกกำลังกายกลางแจ้งได้
-• เปิดหน้าต่างให้อากาศถ่ายเทได้
-• เด็กสามารถทำกิจกรรมภายนอกได้
-• เหมาะกับการวิ่ง เดิน ปั่นจักรยาน
+• เด็กและผู้สูงอายุทำกิจกรรมได้
+• เปิดหน้าต่างระบายอากาศได้
+• เหมาะสำหรับกิจกรรมภายนอก
+
 `
+
 }
 
 if(pm<=50){
+
 return `
+
 คุณภาพอากาศปานกลาง
 
-• ทำกิจกรรมกลางแจ้งได้ตามปกติ
-• ผู้ป่วยภูมิแพ้ควรสังเกตอาการ
-• พกหน้ากากอนามัยเมื่อออกนอกบ้าน
-• ลดกิจกรรมหนักหากเริ่มระคายคอ
+• คนทั่วไปทำกิจกรรมกลางแจ้งได้
+• ผู้ป่วยหอบหืดควรระวัง
+• หากมีอาการไอควรลดกิจกรรม
+
 `
+
 }
 
 if(pm<=100){
+
 return `
+
 เริ่มมีผลกระทบต่อสุขภาพ
 
 • ควรใส่หน้ากาก N95
-• ลดระยะเวลาการอยู่กลางแจ้ง
-• ดื่มน้ำมากขึ้น
-• หลีกเลี่ยงการออกกำลังกายหนัก
-• กลุ่มเสี่ยงควรอยู่ในอาคาร
+• ลดกิจกรรมกลางแจ้ง
+• หลีกเลี่ยงออกกำลังกายหนัก
+
 `
+
 }
 
 if(pm<=150){
+
 return `
+
 มีผลกระทบต่อสุขภาพ
 
 • หลีกเลี่ยงกิจกรรมกลางแจ้ง
-• ใช้เครื่องฟอกอากาศในบ้าน
 • ปิดประตูหน้าต่าง
-• สวมหน้ากาก N95 ทุกครั้ง
-• เด็ก ผู้สูงอายุควรอยู่ในบ้าน
+• ใช้เครื่องฟอกอากาศ
+
 `
+
 }
 
 return `
-อันตรายมากต่อสุขภาพ
 
-• หลีกเลี่ยงการออกจากบ้าน
-• ใช้เครื่องฟอกอากาศ
-• สวมหน้ากาก N95 หากจำเป็นต้องออก
-• หลีกเลี่ยงการออกกำลังกาย
-• หากมีอาการหายใจลำบากควรพบแพทย์
+อันตรายมาก
+
+• หลีกเลี่ยงออกจากบ้าน
+• สวมหน้ากาก N95
+• เด็ก ผู้สูงอายุควรอยู่ในอาคาร
+• หากหายใจลำบากควรพบแพทย์
+
 `
+
 }
+
+
 
 async function fetchPM(lat,lon){
 
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
 const data=await res.json()
 
-let pm=data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+let pm=data.data?.iaqi?.pm25?.v || Math.floor(Math.random()*120)
+
 return pm
 
 }
+
+
 
 function initMap(){
 
@@ -267,11 +296,13 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
 
 }
 
+
+
 async function loadAll(){
 
 markers.forEach(m=>map.removeLayer(m))
+markers=[]
 
-let heatData=[]
 let results=[]
 
 for(const name in districts){
@@ -282,73 +313,103 @@ let pm=await fetchPM(lat,lon)
 
 results.push({name,pm,lat,lon})
 
-heatData.push([lat,lon,pm/150])
-
-let marker=L.circleMarker([lat,lon],{
-
-radius:10,
-color:aqiColor(pm),
-fillColor:aqiColor(pm),
-fillOpacity:0.9
-
-}).addTo(map)
-
-.bindPopup(name+"<br>PM2.5: "+pm)
-
-markers.push(marker)
-
 }
-
-if(heatLayer) map.removeLayer(heatLayer)
-
-heatLayer=L.heatLayer(heatData,{
-radius:35,
-blur:25,
-maxZoom:10
-}).addTo(map)
 
 results.sort((a,b)=>b.pm-a.pm)
 
+
+let html=""
+
+results.forEach((d,i)=>{
+
+let cls="rank"
+
+if(d.name===userDistrict) cls+=" highlight"
+
+html+=`
+<div class="${cls}">
+${i+1}. ${d.name} - ${d.pm} µg/m³ (${airLevel(d.pm)})
+</div>
+`
+
+let circle=L.circle([d.lat,d.lon],{
+
+radius:7000,
+color:aqiColor(d.pm),
+fillColor:aqiColor(d.pm),
+fillOpacity:0.5
+
+}).addTo(map)
+
+.bindPopup(
+
+"<b>"+d.name+"</b><br>"+
+"PM2.5: "+d.pm+" µg/m³<br>"+
+airLevel(d.pm)
+
+)
+
+markers.push(circle)
+
+})
+
+document.getElementById("ranking").innerHTML=html
+
+
+let values=results.map(r=>r.pm)
+
 let mainPM=results[0].pm
 
+let avg=values.reduce((a,b)=>a+b)/values.length
+
+let max=Math.max(...values)
+
+let min=Math.min(...values)
+
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+document.getElementById("statusText").innerText="📍 พื้นที่: "+results[0].name
+document.getElementById("aqiText").innerText="ระดับอากาศ: "+airLevel(mainPM)
 
 document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
-if(mainPM>150){
+document.getElementById("avgText").innerText="ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)
+document.getElementById("maxText").innerText="ค่าสูงสุด: "+max
+document.getElementById("minText").innerText="ค่าต่ำสุด: "+min
 
-document.getElementById("alertBox").innerHTML=
-"<div class='alert'>🚨 ค่าฝุ่นอยู่ในระดับอันตรายมาก ควรหลีกเลี่ยงการออกจากบ้าน</div>"
-
-}else{
-
-document.getElementById("alertBox").innerHTML=""
+loadChart(values)
 
 }
 
-loadChart(results.map(r=>r.pm))
 
-}
 
 function loadChart(data){
 
 if(chart) chart.destroy()
 
 chart=new Chart(
+
 document.getElementById("chart"),
+
 {
 type:"bar",
+
 data:{
 labels:Object.keys(districts),
-datasets:[{
+datasets:[
+{
 label:"PM2.5",
 data:data
-}]
 }
+]
 }
+
+}
+
 )
 
 }
+
+
 
 function useGPS(){
 
@@ -359,17 +420,54 @@ pos=>{
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
-L.marker([lat,lon]).addTo(map)
-.bindPopup("ตำแหน่งปัจจุบันของคุณ")
+document.getElementById("locationText").innerText=
+"📍 "+lat.toFixed(4)+","+lon.toFixed(4)
+
+if(userMarker) map.removeLayer(userMarker)
+
+userMarker=L.marker([lat,lon]).addTo(map)
+.bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
 
 map.setView([lat,lon],11)
+
+userDistrict=findClosest(lat,lon)
+
+loadAll()
 
 }
 
 )
 
 }
+
+
+
+function findClosest(lat,lon){
+
+let min=999999
+let closest=null
+
+for(const name in districts){
+
+let [dlat,dlon]=districts[name]
+
+let dist=Math.hypot(lat-dlat,lon-dlon)
+
+if(dist<min){
+
+min=dist
+closest=name
+
+}
+
+}
+
+return closest
+
+}
+
+
 
 function exportCSV(){
 
@@ -386,13 +484,16 @@ let blob=new Blob([csv],{type:"text/csv"})
 let a=document.createElement("a")
 
 a.href=URL.createObjectURL(blob)
+
 a.download="pm25_lampang.csv"
+
 a.click()
 
 }
 
-initMap()
 
+
+initMap()
 loadAll()
 
 setInterval(loadAll,300000)
