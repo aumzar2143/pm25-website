@@ -16,35 +16,45 @@
 
 body{
 margin:0;
-font-family:Segoe UI;
-background:#eef5f9;
+font-family:'Segoe UI',sans-serif;
 text-align:center;
+transition:background 1s;
+background:linear-gradient(135deg,#74b9ff,#dfe6e9);
 }
 
 h2{
-color:#0a6ebd;
+color:white;
+margin-top:20px;
+text-shadow:0 2px 5px rgba(0,0,0,0.3);
 }
 
 .card{
-background:white;
+background:rgba(255,255,255,0.85);
+backdrop-filter:blur(10px);
 margin:20px auto;
 padding:25px;
-border-radius:16px;
+border-radius:20px;
 max-width:900px;
-box-shadow:0 8px 25px rgba(0,0,0,0.1);
+box-shadow:0 10px 30px rgba(0,0,0,0.2);
 }
 
 #pmValue{
-font-size:70px;
+font-size:80px;
 font-weight:bold;
 }
 
 button{
 padding:10px 16px;
 border:none;
-border-radius:8px;
+border-radius:10px;
 margin:6px;
 cursor:pointer;
+font-size:15px;
+transition:0.3s;
+}
+
+button:hover{
+transform:scale(1.05);
 }
 
 .refresh{background:#00b894;color:white;}
@@ -53,28 +63,46 @@ cursor:pointer;
 
 .rank{
 background:#f1f5f9;
-padding:10px;
+padding:12px;
 margin:6px;
-border-radius:8px;
+border-radius:10px;
+font-weight:500;
 }
 
 .highlight{
 border:2px solid #0984e3;
+background:#eaf4ff;
 }
 
 #map{
 height:420px;
-border-radius:12px;
+border-radius:15px;
+box-shadow:0 8px 20px rgba(0,0,0,0.2);
 }
 
 .legend{
 text-align:left;
-max-width:400px;
+max-width:420px;
 margin:auto;
+font-size:15px;
 }
 
 .legend div{
-margin:4px;
+margin:6px;
+}
+
+canvas{
+max-height:320px;
+}
+
+.loading{
+animation:pulse 1s infinite;
+}
+
+@keyframes pulse{
+0%{opacity:0.5}
+50%{opacity:1}
+100%{opacity:0.5}
 }
 
 </style>
@@ -86,9 +114,9 @@ margin:4px;
 
 <div class="card">
 
-<div id="pmValue">--</div>
+<div id="pmValue" class="loading">--</div>
 
-<p id="statusText">กำลังโหลด...</p>
+<p id="statusText">กำลังโหลดข้อมูล...</p>
 
 <p id="locationText"></p>
 
@@ -118,11 +146,11 @@ margin:4px;
 
 <b>ระดับคุณภาพอากาศ</b>
 
-<div>🟢 สีเขียว (0-25) อากาศดี</div>
-<div>🟡 สีเหลือง (26-50) ปานกลาง</div>
-<div>🟠 สีส้ม (51-100) เริ่มมีผลกระทบ</div>
-<div>🔴 สีแดง (101-150) มีผลต่อสุขภาพ</div>
-<div>🟣 สีม่วง (151+) อันตรายมาก</div>
+<div>🟢 0-25 อากาศดี</div>
+<div>🟡 26-50 ปานกลาง</div>
+<div>🟠 51-100 เริ่มมีผลกระทบ</div>
+<div>🔴 101-150 มีผลต่อสุขภาพ</div>
+<div>🟣 151+ อันตรายมาก</div>
 
 </div>
 
@@ -183,20 +211,29 @@ const districts={
 
 }
 
-
-
 function aqiColor(pm){
 
 if(pm<=25)return"#2ecc71"
 if(pm<=50)return"#f1c40f"
 if(pm<=100)return"#e67e22"
 if(pm<=150)return"#e74c3c"
-
 return"#8e44ad"
 
 }
 
+function setBackground(pm){
 
+let bg=""
+
+if(pm<=25)bg="linear-gradient(135deg,#2ecc71,#a8e6cf)"
+else if(pm<=50)bg="linear-gradient(135deg,#f1c40f,#ffeaa7)"
+else if(pm<=100)bg="linear-gradient(135deg,#e67e22,#fab1a0)"
+else if(pm<=150)bg="linear-gradient(135deg,#e74c3c,#ff7675)"
+else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
+
+document.body.style.background=bg
+
+}
 
 function levelText(pm){
 
@@ -204,93 +241,32 @@ if(pm<=25)return"อากาศดี"
 if(pm<=50)return"ปานกลาง"
 if(pm<=100)return"เริ่มมีผลกระทบ"
 if(pm<=150)return"มีผลกระทบต่อสุขภาพ"
-
 return"อันตรายมาก"
 
 }
 
-
-
 function healthAdvice(pm){
 
-if(pm<=25){
+if(pm<=25)return"อากาศดี สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ เหมาะสำหรับการออกกำลังกาย"
 
-return`
-อากาศอยู่ในเกณฑ์ดีมาก
+if(pm<=50)return"อากาศปานกลาง คนทั่วไปทำกิจกรรมกลางแจ้งได้ แต่ผู้แพ้ฝุ่นควรระวัง"
 
-• สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ
-• เหมาะสำหรับการออกกำลังกาย วิ่ง หรือปั่นจักรยาน
-• เด็ก ผู้สูงอายุ และหญิงตั้งครรภ์สามารถอยู่กลางแจ้งได้
-• เปิดหน้าต่างเพื่อระบายอากาศภายในบ้านได้
-`
+if(pm<=100)return"เริ่มมีผลกระทบ ควรใส่หน้ากาก N95 ลดกิจกรรมกลางแจ้ง"
 
-}
+if(pm<=150)return"มีผลกระทบต่อสุขภาพ หลีกเลี่ยงกิจกรรมกลางแจ้ง"
 
-if(pm<=50){
-
-return`
-คุณภาพอากาศอยู่ในระดับปานกลาง
-
-• คนทั่วไปสามารถทำกิจกรรมกลางแจ้งได้
-• ผู้ป่วยโรคหอบหืดหรือภูมิแพ้ควรสังเกตอาการ
-• หากมีอาการระคายเคืองตา ไอ หรือจาม ควรลดกิจกรรมกลางแจ้ง
-`
+return"อันตรายมาก ควรอยู่ในอาคาร และสวมหน้ากาก N95"
 
 }
-
-if(pm<=100){
-
-return`
-เริ่มมีผลกระทบต่อสุขภาพ
-
-• ควรสวมหน้ากาก N95 เมื่อออกนอกบ้าน
-• ลดระยะเวลาการทำกิจกรรมกลางแจ้ง
-• หลีกเลี่ยงการออกกำลังกายหนัก
-• เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรอยู่ในอาคาร
-`
-
-}
-
-if(pm<=150){
-
-return`
-มีผลกระทบต่อสุขภาพ
-
-• หลีกเลี่ยงกิจกรรมกลางแจ้ง
-• สวมหน้ากาก N95 ทุกครั้งเมื่อออกนอกบ้าน
-• ปิดประตูหน้าต่างเพื่อลดการเข้ามาของฝุ่น
-• ใช้เครื่องฟอกอากาศภายในบ้าน
-`
-
-}
-
-return`
-อันตรายมากต่อสุขภาพ
-
-• ควรอยู่ภายในอาคาร
-• หลีกเลี่ยงการออกจากบ้าน
-• หากจำเป็นต้องออกควรใส่หน้ากาก N95
-• เด็ก ผู้สูงอายุ ผู้ป่วยโรคหัวใจ และโรคปอดควรระมัดระวังอย่างมาก
-• หากมีอาการหายใจลำบาก แน่นหน้าอก หรือเวียนศีรษะควรพบแพทย์
-`
-
-}
-
-
 
 async function fetchPM(lat,lon){
 
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
-
 const data=await res.json()
 
-let pm=data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
-
-return pm
+return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
 
 }
-
-
 
 function initMap(){
 
@@ -299,8 +275,6 @@ map=L.map('map').setView([18.3,99.5],9)
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
 
 }
-
-
 
 async function loadAll(){
 
@@ -326,12 +300,9 @@ let rankingHTML=""
 results.forEach((d,i)=>{
 
 let cls="rank"
-
 if(d.name===userDistrict)cls+=" highlight"
 
-rankingHTML+=`<div class="${cls}">
-${i+1}. ${d.name} - ${d.pm} µg/m³
-</div>`
+rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 let circle=L.circle([d.lat,d.lon],{
 
@@ -352,17 +323,18 @@ document.getElementById("ranking").innerHTML=rankingHTML
 
 let mainPM=results[0].pm
 
+document.getElementById("pmValue").classList.remove("loading")
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 
 document.getElementById("statusText").innerText="ระดับอากาศ: "+levelText(mainPM)
 
 document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
+setBackground(mainPM)
+
 loadChart(results.map(r=>r.pm))
 
 }
-
-
 
 function loadChart(data){
 
@@ -376,12 +348,10 @@ document.getElementById("chart"),
 type:"bar",
 data:{
 labels:Object.keys(districts),
-datasets:[
-{
+datasets:[{
 label:"PM2.5",
 data:data
-}
-]
+}]
 }
 
 }
@@ -389,8 +359,6 @@ data:data
 )
 
 }
-
-
 
 function useGPS(){
 
@@ -422,8 +390,6 @@ loadAll()
 
 }
 
-
-
 function findClosest(lat,lon){
 
 let min=999
@@ -448,8 +414,6 @@ return closest
 
 }
 
-
-
 function exportCSV(){
 
 let csv="District,PM2.5\n"
@@ -472,10 +436,7 @@ a.click()
 
 }
 
-
-
 initMap()
-
 loadAll()
 
 setInterval(loadAll,300000)
