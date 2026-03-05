@@ -148,7 +148,6 @@ margin:auto;
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
-<button onclick="testSound()" style="background:#e17055;color:white;">🔊 ทดสอบเสียง</button>
 
 </div>
 
@@ -196,37 +195,75 @@ margin:auto;
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
+
+// ======================
+// 🔔 ตั้งค่าการแจ้งเตือน
+// ======================
+
+const ALERT_SETTING={
+
+enableAlert:true,
+pmLevel:80,
+sound:true,
+browserNotify:true
+
+}
+
+let alertTriggered=false
+
+function playAlertSound(){
+
+if(!ALERT_SETTING.sound)return
+
+let audio=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
+audio.play()
+
+}
+
+function browserNotification(pm){
+
+if(!ALERT_SETTING.browserNotify)return
+
+if(Notification.permission==="granted"){
+
+new Notification("🚨 PM2.5 สูง",{
+body:`ค่าฝุ่น ${pm} µg/m³`,
+icon:"https://cdn-icons-png.flaticon.com/512/616/616494.png"
+})
+
+}
+
+}
+
+function checkPMAlert(pm){
+
+if(!ALERT_SETTING.enableAlert)return
+
+if(pm>=ALERT_SETTING.pmLevel && !alertTriggered){
+
+document.getElementById("alertBox").style.display="block"
+
+playAlertSound()
+
+browserNotification(pm)
+
+alertTriggered=true
+
+}
+
+if(pm<ALERT_SETTING.pmLevel){
+alertTriggered=false
+}
+
+}
+
+
 let map
 let chart
 let markers=[]
 let userDistrict=null
 let userMarker=null
 let accuracyCircle=null
-
-const alarmSound=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
-
-function testSound(){
-alarmSound.play()
-}
-
-function sendNotification(pm){
-
-if(Notification.permission==="granted"){
-
-new Notification("🚨 PM2.5 สูง",{
-body:"ค่าฝุ่น "+pm+" µg/m³",
-icon:"https://cdn-icons-png.flaticon.com/512/481/481965.png"
-})
-
-}
-
-alarmSound.play()
-
-}
-
-if("Notification" in window){
-Notification.requestPermission()
-}
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -242,6 +279,29 @@ const districts={
 "ห้างฉัตร":[18.3167,99.3500],
 "เมืองปาน":[18.7667,99.4500],
 "แม่ทะ":[18.1000,99.5667]
+}
+
+function findDistrict(lat,lon){
+
+let minDist=999
+let closest=null
+
+for(const name in districts){
+
+let [dlat,dlon]=districts[name]
+
+let dist=Math.sqrt(
+Math.pow(lat-dlat,2)+Math.pow(lon-dlon,2)
+)
+
+if(dist<minDist){
+minDist=dist
+closest=name
+}
+
+}
+
+return closest
 }
 
 function aqiColor(pm){
@@ -265,6 +325,42 @@ else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
 document.body.style.background=bg
 }
 
+function healthAdvice(pm){
+
+let html="<ul>"
+
+if(pm<=25){
+html+=`
+<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
+<li>เหมาะสำหรับออกกำลังกาย</li>
+<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>`
+}
+else if(pm<=50){
+html+=`
+<li>ทำกิจกรรมกลางแจ้งได้</li>
+<li>ผู้แพ้ฝุ่นควรระวัง</li>
+<li>ดื่มน้ำมากขึ้น</li>`
+}
+else if(pm<=100){
+html+=`
+<li>ควรใส่หน้ากาก N95</li>
+<li>ลดกิจกรรมกลางแจ้ง</li>
+<li>ปิดหน้าต่างบ้าน</li>
+<li>ใช้เครื่องฟอกอากาศ</li>`
+}
+else{
+html+=`
+<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
+<li>สวมหน้ากาก N95</li>
+<li>อยู่ในอาคาร</li>
+<li>ใช้เครื่องฟอกอากาศ</li>
+<li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>`
+}
+
+html+="</ul>"
+return html
+}
+
 async function fetchPM(lat,lon){
 
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
@@ -279,6 +375,26 @@ function initMap(){
 map=L.map('map').setView([18.3,99.5],9)
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
+}
+
+function animatePM(value){
+
+let el=document.getElementById("pmValue")
+let start=0
+
+let interval=setInterval(()=>{
+
+start+=Math.ceil(value/30)
+
+if(start>=value){
+start=value
+clearInterval(interval)
+}
+
+el.innerText=start+" µg/m³"
+
+},30)
 
 }
 
@@ -310,14 +426,19 @@ results.forEach((d,i)=>{
 chartLabels.push(d.name)
 chartData.push(d.pm)
 
-rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
+let cls="rank"
+if(d.name===userDistrict)cls+=" highlight"
+
+rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 let circle=L.circle([d.lat,d.lon],{
 radius:7000,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
-fillOpacity:0.6
+fillOpacity:0.6,
+weight:d.name===userDistrict?5:2
 }).addTo(map)
+.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}`)
 
 markers.push(circle)
 
@@ -327,16 +448,19 @@ document.getElementById("ranking").innerHTML=rankingHTML
 
 let mainPM=results[0].pm
 
-document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+animatePM(mainPM)
 
 document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
+
+document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
 
 setBackground(mainPM)
 
 if(mainPM>100){
 document.getElementById("alertBox").style.display="block"
-sendNotification(mainPM)
 }
+
+checkPMAlert(mainPM)
 
 loadChart(chartLabels,chartData)
 
@@ -364,17 +488,51 @@ data:data
 
 function useGPS(){
 
-navigator.geolocation.getCurrentPosition(pos=>{
+navigator.geolocation.getCurrentPosition(async pos=>{
 
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
+let acc=pos.coords.accuracy
 
-map.setView([lat,lon],13)
+userDistrict=findDistrict(lat,lon)
 
-L.marker([lat,lon]).addTo(map)
+if(userMarker)map.removeLayer(userMarker)
+if(accuracyCircle)map.removeLayer(accuracyCircle)
+
+userMarker=L.marker([lat,lon]).addTo(map)
 .bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
 
+let icon=userMarker._icon
+if(icon){
+icon.style.animation="bounce 1.2s infinite"
+}
+
+accuracyCircle=L.circle([lat,lon],{
+radius:acc,
+color:"#0984e3",
+fillColor:"#74b9ff",
+fillOpacity:0.3
+}).addTo(map)
+
+map.setView([lat,lon],13)
+
+loadAll()
+
+const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+const data=await geo.json()
+
+document.getElementById("locationText").innerText=
+"📍 "+data.display_name
+
+},
+err=>{
+alert("ไม่สามารถใช้ GPS ได้ กรุณาอนุญาตตำแหน่ง")
+},
+{
+enableHighAccuracy:true,
+timeout:10000,
+maximumAge:0
 })
 
 }
@@ -383,6 +541,10 @@ initMap()
 loadAll()
 
 setInterval(loadAll,300000)
+
+if("Notification" in window){
+Notification.requestPermission()
+}
 
 </script>
 
