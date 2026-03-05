@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>HappyAir HealthyLife PM2.5 Lampang</title>
+<title>PM2.5 Lampang Smart Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -15,342 +14,220 @@
 <style>
 
 body{
+font-family:sans-serif;
 margin:0;
-font-family:Segoe UI;
-text-align:center;
-overflow-x:hidden;
+background:#e8f4ff;
 transition:1s;
-background:linear-gradient(135deg,#6dd5fa,#ffffff);
+text-align:center;
 }
 
-/* เมฆลอย */
-
-.cloud{
-position:fixed;
-top:0;
-left:-300px;
-width:600px;
-opacity:0.35;
-animation:cloudmove 120s linear infinite;
-pointer-events:none;
-}
-
-.cloud2{
-top:120px;
-animation-duration:160s;
-}
-
-@keyframes cloudmove{
-0%{left:-600px}
-100%{left:120%}
-}
-
-/* ฝุ่นลอย */
-
-.dust{
-position:fixed;
-width:6px;
-height:6px;
-background:rgba(120,120,120,0.4);
-border-radius:50%;
-animation:float 10s infinite linear;
-pointer-events:none;
-}
-
-@keyframes float{
-0%{transform:translateY(100vh)}
-100%{transform:translateY(-100px)}
-}
-
-h1{
-color:white;
-text-shadow:0 3px 10px rgba(0,0,0,0.4);
+header{
+font-size:30px;
+font-weight:bold;
+padding:15px;
 }
 
 .card{
 background:white;
-max-width:900px;
-margin:20px auto;
-padding:25px;
-border-radius:20px;
-box-shadow:0 10px 40px rgba(0,0,0,0.2);
+padding:20px;
+margin:10px;
+border-radius:15px;
+box-shadow:0 5px 15px rgba(0,0,0,0.2);
 }
-
-#pmValue{
-font-size:80px;
-font-weight:bold;
-}
-
-button{
-padding:10px 18px;
-border:none;
-border-radius:10px;
-cursor:pointer;
-margin:5px;
-}
-
-.refresh{background:#00b894;color:white}
-.gps{background:#0984e3;color:white}
 
 #map{
-height:420px;
+height:400px;
+margin:10px;
 border-radius:15px;
 }
 
-.alert{
-background:red;
-color:white;
-padding:10px;
-display:none;
+.pm{
+font-size:60px;
 font-weight:bold;
 }
 
-.rank{
-padding:10px;
-background:#f2f2f2;
-margin:6px;
-border-radius:10px;
+#advice{
+font-size:18px;
+margin-top:10px;
 }
 
-canvas{
-max-height:300px;
+.cloud{
+position:fixed;
+top:50px;
+font-size:50px;
+animation:cloudmove 60s linear infinite;
+opacity:0.6;
+}
+
+@keyframes cloudmove{
+0%{left:-200px}
+100%{left:110%}
+}
+
+#fog{
+position:fixed;
+bottom:0;
+width:100%;
+height:200px;
+background:rgba(200,200,200,0.3);
+pointer-events:none;
+animation:fogmove 20s linear infinite;
+}
+
+@keyframes fogmove{
+0%{transform:translateX(-50px)}
+50%{transform:translateX(50px)}
+100%{transform:translateX(-50px)}
+}
+
+.alert{
+position:fixed;
+top:20px;
+left:50%;
+transform:translateX(-50%);
+background:red;
+color:white;
+padding:15px 30px;
+font-size:22px;
+border-radius:10px;
+display:none;
+z-index:999;
 }
 
 </style>
-
 </head>
 
 <body>
 
-<img class="cloud" src="https://upload.wikimedia.org/wikipedia/commons/6/60/Cloud_icon.png">
-<img class="cloud cloud2" src="https://upload.wikimedia.org/wikipedia/commons/6/60/Cloud_icon.png">
+<div class="cloud">☁</div>
+<div class="cloud" style="top:120px; animation-duration:90s;">☁</div>
 
-<div id="alertBox" class="alert">
-🚨 ค่าฝุ่นสูง ควรสวมหน้ากาก N95
-</div>
+<div id="fog"></div>
 
-<h1>🌫 HappyAir HealthyLife PM2.5 Lampang</h1>
+<div class="alert" id="alert">🚨 ค่าฝุ่นเกินมาตรฐาน!</div>
+
+<header>🌫 PM2.5 Lampang Smart Dashboard</header>
 
 <div class="card">
-
-<div id="pmValue">--</div>
-
-<p id="status">กำลังโหลดข้อมูล...</p>
-
-<p id="time"></p>
-
-<button class="refresh" onclick="loadData()">🔄 รีเฟรช</button>
-<button class="gps" onclick="useGPS()">📍 ตำแหน่งฉัน</button>
-
+ค่าฝุ่นปัจจุบัน
+<div class="pm" id="pm">กำลังโหลด...</div>
+<div id="status"></div>
+<div id="advice"></div>
 </div>
 
 <div class="card">
-
-<h3>🗺 แผนที่คุณภาพอากาศ</h3>
+📈 กราฟค่าฝุ่น
+<canvas id="chart"></canvas>
+</div>
 
 <div id="map"></div>
 
-</div>
-
-<div class="card">
-
-<h3>📊 กราฟ PM2.5</h3>
-
-<canvas id="chart"></canvas>
-
-</div>
-
-<div class="card">
-
-<h3>🏆 อันดับอำเภอ</h3>
-
-<div id="ranking"></div>
-
-</div>
-
 <script>
 
-const districts={
-"เมืองลำปาง":[18.29,99.49],
-"แม่เมาะ":[18.29,99.75],
-"งาว":[18.78,99.96],
-"แจ้ห่ม":[18.71,99.61],
-"เกาะคา":[18.20,99.36],
-"เถิน":[17.63,99.23],
-"วังเหนือ":[19.15,99.60]
-}
+const map = L.map('map').setView([18.29,99.49],10)
 
-let map
-let chart
-let markers=[]
-
-function aqiColor(pm){
-
-if(pm<=25)return"#2ecc71"
-if(pm<=50)return"#f1c40f"
-if(pm<=100)return"#e67e22"
-if(pm<=150)return"#e74c3c"
-return"#8e44ad"
-
-}
-
-function setBG(pm){
-
-if(pm<=25)document.body.style.background="linear-gradient(135deg,#55efc4,#81ecec)"
-else if(pm<=50)document.body.style.background="linear-gradient(135deg,#ffeaa7,#fab1a0)"
-else if(pm<=100)document.body.style.background="linear-gradient(135deg,#fab1a0,#ff7675)"
-else document.body.style.background="linear-gradient(135deg,#d63031,#6c5ce7)"
-
-}
-
-async function getPM(lat,lon){
-
-try{
-
-let res=await fetch(`https://api.openaq.org/v2/latest?coordinates=${lat},${lon}`)
-
-let data=await res.json()
-
-return Math.round(data.results[0].measurements[0].value)
-
-}catch{
-
-return Math.floor(Math.random()*120)
-
-}
-
-}
-
-function initMap(){
-
-map=L.map('map').setView([18.3,99.5],9)
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
-
-}
-
-async function loadData(){
-
-markers.forEach(m=>map.removeLayer(m))
-markers=[]
-
-let data=[]
-
-for(const d in districts){
-
-let [lat,lon]=districts[d]
-
-let pm=await getPM(lat,lon)
-
-data.push({name:d,pm,lat,lon})
-
-}
-
-data.sort((a,b)=>b.pm-a.pm)
-
-let rankHTML=""
-
-data.forEach((d,i)=>{
-
-rankHTML+=`<div class="rank">${i+1}. ${d.name} ${d.pm} µg/m³</div>`
-
-let circle=L.circle([d.lat,d.lon],{
-
-radius:8000,
-color:aqiColor(d.pm),
-fillColor:aqiColor(d.pm),
-fillOpacity:.5
-
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+maxZoom:19
 }).addTo(map)
 
-.bindPopup(`${d.name}<br>PM2.5 ${d.pm}`)
+let circle
 
-markers.push(circle)
+async function loadPM(){
 
-})
+const url="https://api.waqi.info/feed/geo:18.29;99.49/?token=demo"
 
-document.getElementById("ranking").innerHTML=rankHTML
+const res=await fetch(url)
+const data=await res.json()
 
-let main=data[0].pm
+const pm=data.data.iaqi.pm25.v
 
-document.getElementById("pmValue").innerText=main
+document.getElementById("pm").innerHTML=pm+" µg/m³"
 
-document.getElementById("status").innerText="PM2.5 สูงสุดในจังหวัด"
+let status=""
+let advice=""
+let color="green"
 
-setBG(main)
+if(pm<=25){
+status="ดี"
+advice="คุณภาพอากาศดี สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ"
+color="green"
+document.body.style.background="#b9f6ca"
+}
 
-if(main>100)document.getElementById("alertBox").style.display="block"
+else if(pm<=50){
+status="ปานกลาง"
+advice="ผู้ที่มีโรคทางเดินหายใจควรสวมหน้ากากเมื่อออกนอกอาคาร"
+color="yellow"
+document.body.style.background="#fff59d"
+}
 
-let now=new Date()
+else if(pm<=100){
+status="เริ่มมีผลกระทบ"
+advice="ควรลดกิจกรรมกลางแจ้ง และสวมหน้ากาก N95"
+color="orange"
+document.body.style.background="#ffcc80"
+}
 
-document.getElementById("time").innerText="อัปเดต "+now.toLocaleTimeString()
+else if(pm<=150){
+status="มีผลกระทบต่อสุขภาพ"
+advice="หลีกเลี่ยงกิจกรรมกลางแจ้ง ใช้เครื่องฟอกอากาศ"
+color="red"
+document.body.style.background="#ef9a9a"
+document.getElementById("alert").style.display="block"
+}
 
-loadChart(data.map(d=>d.pm))
+else{
+status="อันตราย"
+advice="ควรอยู่ภายในอาคาร ปิดหน้าต่าง และสวมหน้ากาก N95"
+color="purple"
+document.body.style.background="#ce93d8"
+document.getElementById("alert").style.display="block"
+}
+
+document.getElementById("status").innerHTML="สถานะ: "+status
+document.getElementById("advice").innerHTML=advice
+
+if(circle) map.removeLayer(circle)
+
+circle=L.circle([18.29,99.49],{
+color:color,
+fillColor:color,
+fillOpacity:0.5,
+radius:10000
+}).addTo(map)
 
 }
 
-function loadChart(values){
+loadPM()
 
-if(chart)chart.destroy()
+setInterval(loadPM,300000)
 
-chart=new Chart(document.getElementById("chart"),{
+const ctx=document.getElementById("chart")
 
-type:"bar",
-
+new Chart(ctx,{
+type:"line",
 data:{
-labels:Object.keys(districts),
+labels:["1ชม","2ชม","3ชม","4ชม","5ชม","6ชม"],
 datasets:[{
 label:"PM2.5",
-data:values,
-borderRadius:8
+data:[20,35,40,50,60,45],
+fill:true
 }]
-},
-
-options:{
-animation:{duration:1500},
-plugins:{legend:{display:false}}
 }
-
 })
 
-}
+navigator.geolocation.getCurrentPosition(function(pos){
 
-function useGPS(){
+const lat=pos.coords.latitude
+const lon=pos.coords.longitude
 
-navigator.geolocation.getCurrentPosition(pos=>{
+L.marker([lat,lon]).addTo(map)
+.bindPopup("ตำแหน่งของคุณ")
+.openPopup()
 
-let lat=pos.coords.latitude
-let lon=pos.coords.longitude
-
-L.marker([lat,lon]).addTo(map).bindPopup("ตำแหน่งคุณ")
-
-map.setView([lat,lon],11)
+map.setView([lat,lon],12)
 
 })
-
-}
-
-function createDust(){
-
-for(let i=0;i<40;i++){
-
-let d=document.createElement("div")
-d.className="dust"
-
-d.style.left=Math.random()*100+"%"
-d.style.animationDuration=5+Math.random()*10+"s"
-
-document.body.appendChild(d)
-
-}
-
-}
-
-initMap()
-loadData()
-createDust()
-
-setInterval(loadData,300000)
 
 </script>
 
