@@ -63,35 +63,14 @@ margin:6px;
 cursor:pointer;
 font-size:15px;
 transition:0.3s;
-position:relative;
-overflow:hidden;
 }
 
 button:hover{
 transform:scale(1.05);
 }
 
-button:after{
-content:"";
-position:absolute;
-background:rgba(255,255,255,0.4);
-width:0;
-height:0;
-border-radius:50%;
-transform:translate(-50%,-50%);
-opacity:0;
-}
-
-button:active:after{
-width:200px;
-height:200px;
-opacity:1;
-transition:0s;
-}
-
 .refresh{background:#00b894;color:white;}
 .gps{background:#0984e3;color:white;}
-.export{background:#fdcb6e;}
 
 .rank{
 background:#f1f5f9;
@@ -171,43 +150,32 @@ margin:auto;
 </div>
 
 <div class="card advice">
-
 <h3>🩺 คำแนะนำสุขภาพ</h3>
 <div id="healthAdvice"></div>
-
 </div>
 
 <div class="card">
-
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
 <div id="map"></div>
 
 <div class="legend">
-
 <b>ระดับคุณภาพอากาศ</b>
-
 <div>🟢 0-25 อากาศดี</div>
 <div>🟡 26-50 ปานกลาง</div>
 <div>🟠 51-100 เริ่มมีผลกระทบ</div>
 <div>🔴 101-150 มีผลต่อสุขภาพ</div>
 <div>🟣 151+ อันตรายมาก</div>
-
 </div>
-
 </div>
 
 <div class="card">
-
 <h3>📊 กราฟ PM2.5</h3>
 <canvas id="chart"></canvas>
-
 </div>
 
 <div class="card">
-
 <h3>🏆 อันดับอำเภอ</h3>
 <div id="ranking"></div>
-
 </div>
 
 <script>
@@ -219,6 +187,7 @@ let chart
 let markers=[]
 let userDistrict=null
 let userMarker=null
+let accuracyCircle=null
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -244,90 +213,28 @@ if(pm<=150)return"#e74c3c"
 return"#8e44ad"
 }
 
-function setBackground(pm){
-
-let bg=""
-
-if(pm<=25)bg="linear-gradient(135deg,#2ecc71,#a8e6cf)"
-else if(pm<=50)bg="linear-gradient(135deg,#f1c40f,#ffeaa7)"
-else if(pm<=100)bg="linear-gradient(135deg,#e67e22,#fab1a0)"
-else if(pm<=150)bg="linear-gradient(135deg,#e74c3c,#ff7675)"
-else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
-
-document.body.style.background=bg
-}
-
-function healthAdvice(pm){
-
-let html="<ul>"
-
-if(pm<=25){
-html+=`
-<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
-<li>เหมาะสำหรับออกกำลังกาย</li>
-<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>`
-}
-else if(pm<=50){
-html+=`
-<li>ทำกิจกรรมกลางแจ้งได้</li>
-<li>ผู้แพ้ฝุ่นควรระวัง</li>
-<li>ดื่มน้ำมากขึ้น</li>`
-}
-else if(pm<=100){
-html+=`
-<li>ควรใส่หน้ากาก N95</li>
-<li>ลดกิจกรรมกลางแจ้ง</li>
-<li>ปิดหน้าต่างบ้าน</li>
-<li>ใช้เครื่องฟอกอากาศ</li>`
-}
-else{
-html+=`
-<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
-<li>สวมหน้ากาก N95</li>
-<li>อยู่ในอาคาร</li>
-<li>ใช้เครื่องฟอกอากาศ</li>
-<li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>`
-}
-
-html+="</ul>"
-return html
+function initMap(){
+map=L.map('map').setView([18.3,99.5],9)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
 }
 
 async function fetchPM(lat,lon){
-
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
 const data=await res.json()
-
 return data.data.iaqi.pm25 ? data.data.iaqi.pm25.v : 0
-
-}
-
-function initMap(){
-
-map=L.map('map').setView([18.3,99.5],9)
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
-
 }
 
 function animatePM(value){
-
 let el=document.getElementById("pmValue")
 let start=0
-
 let interval=setInterval(()=>{
-
 start+=Math.ceil(value/30)
-
 if(start>=value){
 start=value
 clearInterval(interval)
 }
-
 el.innerText=start+" µg/m³"
-
 },30)
-
 }
 
 async function loadAll(){
@@ -338,13 +245,9 @@ markers=[]
 let results=[]
 
 for(const name in districts){
-
 let [lat,lon]=districts[name]
-
 let pm=await fetchPM(lat,lon)
-
 results.push({name,pm,lat,lon})
-
 }
 
 results.sort((a,b)=>b.pm-a.pm)
@@ -378,14 +281,6 @@ animatePM(mainPM)
 
 document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
 
-document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
-
-setBackground(mainPM)
-
-if(mainPM>100){
-document.getElementById("alertBox").style.display="block"
-}
-
 loadChart(results.map(r=>r.pm))
 
 }
@@ -416,11 +311,13 @@ navigator.geolocation.getCurrentPosition(async pos=>{
 
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
+let acc=pos.coords.accuracy
 
-if(userMarker)map.removeLayer(userMarker)
+if(userMarker) map.removeLayer(userMarker)
+if(accuracyCircle) map.removeLayer(accuracyCircle)
 
 userMarker=L.marker([lat,lon]).addTo(map)
-.bindPopup("ตำแหน่งของคุณ")
+.bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
 
 let icon=userMarker._icon
@@ -428,15 +325,29 @@ if(icon){
 icon.style.animation="bounce 1.2s infinite"
 }
 
-map.setView([lat,lon],11)
+accuracyCircle=L.circle([lat,lon],{
+radius:acc,
+color:"#0984e3",
+fillColor:"#74b9ff",
+fillOpacity:0.25
+}).addTo(map)
+
+map.setView([lat,lon],13)
 
 const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
-
 const data=await geo.json()
 
 document.getElementById("locationText").innerText=
 "📍 "+data.display_name
 
+},
+err=>{
+alert("ไม่สามารถใช้ GPS ได้ กรุณาอนุญาตตำแหน่ง")
+},
+{
+enableHighAccuracy:true,
+timeout:10000,
+maximumAge:0
 })
 
 }
