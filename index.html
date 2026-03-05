@@ -25,30 +25,41 @@ background:linear-gradient(135deg,#74b9ff,#dfe6e9);
 h2{
 color:white;
 margin-top:20px;
-text-shadow:0 2px 5px rgba(0,0,0,0.3);
+text-shadow:0 2px 5px rgba(0,0,0,0.4);
 }
 
 .card{
-background:rgba(255,255,255,0.9);
+background:rgba(255,255,255,0.92);
 margin:20px auto;
 padding:25px;
 border-radius:20px;
 max-width:900px;
-box-shadow:0 10px 30px rgba(0,0,0,0.2);
+box-shadow:0 10px 30px rgba(0,0,0,0.25);
+transition:0.3s;
+}
+
+.card:hover{
+transform:translateY(-3px);
 }
 
 #pmValue{
 font-size:80px;
 font-weight:bold;
+transition:0.5s;
 }
 
 button{
 padding:10px 16px;
 border:none;
-border-radius:10px;
+border-radius:12px;
 margin:6px;
 cursor:pointer;
 font-size:15px;
+transition:0.3s;
+}
+
+button:hover{
+transform:scale(1.05);
 }
 
 .refresh{background:#00b894;color:white;}
@@ -60,7 +71,6 @@ background:#f1f5f9;
 padding:12px;
 margin:6px;
 border-radius:10px;
-font-weight:500;
 }
 
 .highlight{
@@ -73,29 +83,42 @@ height:420px;
 border-radius:15px;
 }
 
-.legend{
-text-align:left;
-max-width:420px;
-margin:auto;
-font-size:15px;
-}
-
-.legend div{
-margin:6px;
-}
-
 canvas{
 max-height:320px;
 }
 
-.loading{
-animation:pulse 1s infinite;
+.advice ul{
+text-align:left;
+max-width:600px;
+margin:auto;
 }
 
-@keyframes pulse{
-0%{opacity:0.5}
-50%{opacity:1}
-100%{opacity:0.5}
+.alertBox{
+display:none;
+background:#ff4d4d;
+color:white;
+padding:15px;
+font-size:18px;
+font-weight:bold;
+}
+
+.popupAlert{
+position:fixed;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+background:white;
+padding:30px;
+border-radius:20px;
+box-shadow:0 15px 40px rgba(0,0,0,0.4);
+display:none;
+z-index:999;
+animation:pop 0.5s;
+}
+
+@keyframes pop{
+0%{transform:scale(0.6) translate(-50%,-50%)}
+100%{transform:scale(1) translate(-50%,-50%)}
 }
 
 </style>
@@ -103,11 +126,21 @@ animation:pulse 1s infinite;
 
 <body>
 
+<div id="alertBar" class="alertBox">
+🚨 ค่าฝุ่นสูงเกินมาตรฐาน กรุณาสวมหน้ากาก N95
+</div>
+
+<div id="popup" class="popupAlert">
+<h2>🚨 แจ้งเตือนค่าฝุ่น</h2>
+<p>ค่าฝุ่น PM2.5 สูงเกินมาตรฐาน</p>
+<button onclick="closePopup()">ปิด</button>
+</div>
+
 <h2>🌫 HappyAir HealthyLife PM2.5 - Lampang</h2>
 
 <div class="card">
 
-<div id="pmValue" class="loading">--</div>
+<div id="pmValue">--</div>
 
 <p id="statusText">กำลังโหลดข้อมูล...</p>
 
@@ -120,11 +153,11 @@ animation:pulse 1s infinite;
 </div>
 
 
-<div class="card">
+<div class="card advice">
 
 <h3>🩺 คำแนะนำสุขภาพ</h3>
 
-<p id="healthAdvice"></p>
+<div id="healthAdvice"></div>
 
 </div>
 
@@ -134,18 +167,6 @@ animation:pulse 1s infinite;
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
 
 <div id="map"></div>
-
-<div class="legend">
-
-<b>ระดับคุณภาพอากาศ</b>
-
-<div>🟢 0-25 อากาศดี</div>
-<div>🟡 26-50 ปานกลาง</div>
-<div>🟠 51-100 เริ่มมีผลกระทบ</div>
-<div>🔴 101-150 มีผลต่อสุขภาพ</div>
-<div>🟣 151+ อันตรายมาก</div>
-
-</div>
 
 </div>
 
@@ -183,7 +204,6 @@ const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 let map
 let chart
 let markers=[]
-let userMarker=null
 let userDistrict=null
 
 const districts={
@@ -210,29 +230,73 @@ if(pm<=150)return"#e74c3c"
 return"#8e44ad"
 }
 
-function levelText(pm){
-if(pm<=25)return"อากาศดี"
-if(pm<=50)return"ปานกลาง"
-if(pm<=100)return"เริ่มมีผลกระทบ"
-if(pm<=150)return"มีผลกระทบต่อสุขภาพ"
-return"อันตรายมาก"
+function setBackground(pm){
+
+let bg=""
+
+if(pm<=25)bg="linear-gradient(135deg,#2ecc71,#a8e6cf)"
+else if(pm<=50)bg="linear-gradient(135deg,#f1c40f,#ffeaa7)"
+else if(pm<=100)bg="linear-gradient(135deg,#e67e22,#fab1a0)"
+else if(pm<=150)bg="linear-gradient(135deg,#e74c3c,#ff7675)"
+else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
+
+document.body.style.background=bg
 }
 
 function healthAdvice(pm){
 
-if(pm<=25)
-return "อากาศดีมาก เหมาะสำหรับกิจกรรมกลางแจ้ง การวิ่ง ปั่นจักรยาน หรือออกกำลังกายกลางแจ้งได้ตามปกติ กลุ่มเด็ก ผู้สูงอายุ และหญิงตั้งครรภ์สามารถทำกิจกรรมได้โดยไม่มีความเสี่ยง"
+let html="<ul>"
 
-if(pm<=50)
-return "คุณภาพอากาศปานกลาง คนทั่วไปสามารถใช้ชีวิตตามปกติได้ แต่ผู้ที่เป็นโรคภูมิแพ้ โรคหอบหืด หรือโรคปอด ควรสังเกตอาการตนเอง หากมีอาการไอ จาม หรือแสบตา ควรลดกิจกรรมกลางแจ้ง"
+if(pm<=25){
+html+=`
+<li>สามารถทำกิจกรรมกลางแจ้งได้</li>
+<li>เหมาะสำหรับออกกำลังกาย</li>
+<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>
+`
+}
 
-if(pm<=100)
-return "เริ่มมีผลกระทบต่อสุขภาพ ควรลดกิจกรรมกลางแจ้ง หลีกเลี่ยงการออกกำลังกายหนักกลางแจ้ง ควรสวมหน้ากาก N95 เมื่อออกนอกอาคาร ปิดประตูหน้าต่างเพื่อลดฝุ่นในบ้าน และดื่มน้ำมากๆเพื่อลดการระคายเคืองทางเดินหายใจ"
+else if(pm<=50){
+html+=`
+<li>ทำกิจกรรมกลางแจ้งได้</li>
+<li>ผู้แพ้ฝุ่นควรสังเกตอาการ</li>
+<li>ควรดื่มน้ำมากขึ้น</li>
+`
+}
 
-if(pm<=150)
-return "มีผลกระทบต่อสุขภาพ กลุ่มเสี่ยง เช่น เด็ก ผู้สูงอายุ ผู้ป่วยโรคหัวใจ โรคปอด หรือโรคหอบหืด ควรหลีกเลี่ยงกิจกรรมกลางแจ้งอย่างเด็ดขาด ควรใช้เครื่องฟอกอากาศภายในบ้าน และสวมหน้ากากป้องกันฝุ่นทุกครั้งเมื่อออกนอกบ้าน"
+else if(pm<=100){
+html+=`
+<li>ควรใส่หน้ากาก N95</li>
+<li>ลดกิจกรรมกลางแจ้ง</li>
+<li>ปิดหน้าต่างบ้าน</li>
+<li>ใช้เครื่องฟอกอากาศ</li>
+`
+}
 
-return "อันตรายมากต่อสุขภาพ ทุกคนควรหลีกเลี่ยงกิจกรรมกลางแจ้ง ปิดบ้านให้มิดชิด ใช้เครื่องฟอกอากาศ สวมหน้ากาก N95 หรือ KN95 หากจำเป็นต้องออกจากบ้าน และควรติดตามค่าฝุ่นอย่างใกล้ชิด"
+else{
+html+=`
+<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
+<li>สวมหน้ากาก N95</li>
+<li>อยู่ในอาคาร</li>
+<li>ใช้เครื่องฟอกอากาศ</li>
+<li>เด็กและผู้สูงอายุควรระวัง</li>
+`
+}
+
+html+="</ul>"
+
+return html
+
+}
+
+function showAlert(){
+
+document.getElementById("alertBar").style.display="block"
+document.getElementById("popup").style.display="block"
+
+}
+
+function closePopup(){
+document.getElementById("popup").style.display="none"
 }
 
 async function fetchPM(lat,lon){
@@ -279,7 +343,6 @@ color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
 fillOpacity:0.6
 }).addTo(map)
-.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}<br>${levelText(d.pm)}`)
 
 markers.push(circle)
 
@@ -287,14 +350,16 @@ markers.push(circle)
 
 document.getElementById("ranking").innerHTML=rankingHTML
 
-let mainPM=results[0].pm
+let pm=results[0].pm
 
-document.getElementById("pmValue").classList.remove("loading")
-document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+document.getElementById("pmValue").innerText=pm
+document.getElementById("statusText").innerText="PM2.5 "+pm+" µg/m³"
 
-document.getElementById("statusText").innerText="ระดับอากาศ: "+levelText(mainPM)
+document.getElementById("healthAdvice").innerHTML=healthAdvice(pm)
 
-document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
+setBackground(pm)
+
+if(pm>100)showAlert()
 
 loadChart(results.map(r=>r.pm))
 
@@ -320,81 +385,6 @@ data:data
 
 }
 
-async function getAddress(lat,lon){
-
-const res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
-const data=await res.json()
-
-const a=data.address
-
-let house=a.house_number||"-"
-let road=a.road||"-"
-let sub=a.suburb||a.village||"-"
-let dist=a.county||"-"
-let prov=a.state||"-"
-
-document.getElementById("locationText").innerHTML=
-
-`📍 ตำแหน่งปัจจุบัน<br>
-🏠 บ้านเลขที่: ${house}<br>
-🛣 ถนน: ${road}<br>
-📍 ตำบล: ${sub}<br>
-🏙 อำเภอ: ${dist}<br>
-🌏 จังหวัด: ${prov}`
-
-}
-
-function useGPS(){
-
-navigator.geolocation.getCurrentPosition(
-
-async pos=>{
-
-let lat=pos.coords.latitude
-let lon=pos.coords.longitude
-
-await getAddress(lat,lon)
-
-if(userMarker)map.removeLayer(userMarker)
-
-userMarker=L.marker([lat,lon]).addTo(map)
-.bindPopup("ตำแหน่งของคุณ")
-.openPopup()
-
-map.setView([lat,lon],11)
-
-userDistrict=findClosest(lat,lon)
-
-loadAll()
-
-}
-
-)
-
-}
-
-function findClosest(lat,lon){
-
-let min=999
-let closest=null
-
-for(const name in districts){
-
-let [dlat,dlon]=districts[name]
-
-let dist=Math.hypot(lat-dlat,dlon-lon)
-
-if(dist<min){
-min=dist
-closest=name
-}
-
-}
-
-return closest
-
-}
-
 function exportCSV(){
 
 let csv="District,PM2.5\n"
@@ -404,7 +394,6 @@ csv+=el.innerText+"\n"
 })
 
 let blob=new Blob([csv],{type:"text/csv"})
-
 let a=document.createElement("a")
 
 a.href=URL.createObjectURL(blob)
