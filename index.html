@@ -63,6 +63,8 @@ margin:6px;
 cursor:pointer;
 font-size:15px;
 transition:0.3s;
+position:relative;
+overflow:hidden;
 }
 
 button:hover{
@@ -147,6 +149,9 @@ margin:auto;
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
 
+<!-- ปุ่มผู้ดูแลแจ้งเตือน -->
+<button onclick="adminAlert()">🚨 ส่งแจ้งเตือนประชาชน</button>
+
 </div>
 
 <div class="card advice">
@@ -189,35 +194,14 @@ margin:auto;
 
 </div>
 
+<!-- เสียงแจ้งเตือน -->
+<audio id="alertSound">
+<source src="https://notificationsounds.com/storage/sounds/file-sounds-1150-pristine.mp3">
+</audio>
+
 <script>
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
-
-if ("Notification" in window) {
-Notification.requestPermission();
-}
-
-const messageSound = new Audio("https://notificationsounds.com/storage/sounds/file-sounds-1150-pristine.mp3")
-
-function playMessageSound(){
-messageSound.currentTime=0
-messageSound.play()
-}
-
-function sendNotification(pm){
-
-if(Notification.permission==="granted"){
-
-new Notification("🚨 แจ้งเตือนคุณภาพอากาศ",{
-body:"PM2.5 ตอนนี้ "+pm+" µg/m³ ควรสวมหน้ากาก N95",
-icon:"https://cdn-icons-png.flaticon.com/512/4005/4005901.png"
-})
-
-playMessageSound()
-
-}
-
-}
 
 let map
 let chart
@@ -418,11 +402,7 @@ document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
 setBackground(mainPM)
 
 if(mainPM>100){
-
 document.getElementById("alertBox").style.display="block"
-
-sendNotification(mainPM)
-
 }
 
 loadChart(chartLabels,chartData)
@@ -466,6 +446,11 @@ userMarker=L.marker([lat,lon]).addTo(map)
 .bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
 
+let icon=userMarker._icon
+if(icon){
+icon.style.animation="bounce 1.2s infinite"
+}
+
 accuracyCircle=L.circle([lat,lon],{
 radius:acc,
 color:"#0984e3",
@@ -477,36 +462,57 @@ map.setView([lat,lon],13)
 
 loadAll()
 
-},
-err=>{
-alert("ไม่สามารถใช้ GPS ได้ กรุณาอนุญาตตำแหน่ง")
+const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+const data=await geo.json()
+
+document.getElementById("locationText").innerText=
+"📍 "+data.display_name
+
 })
 
 }
 
-function checkTimeNotify(){
+/* ===== ระบบแจ้งเตือน ===== */
 
-let now=new Date()
+function requestNotification(){
 
-let h=now.getHours()
-let m=now.getMinutes()
+if("Notification" in window){
 
-if((h===6 || h===18) && m===0){
+Notification.requestPermission()
 
-loadAll()
+}
 
-playMessageSound()
+}
+
+requestNotification()
+
+function sendNotification(title,message){
 
 if(Notification.permission==="granted"){
 
-new Notification("🌫 รายงาน PM2.5 Lampang",{
-body:"ระบบได้อัปเดตค่าฝุ่นล่าสุดแล้ว",
-icon:"https://cdn-icons-png.flaticon.com/512/4005/4005901.png"
+new Notification(title,{
+body:message,
+icon:"https://cdn-icons-png.flaticon.com/512/1684/1684375.png"
 })
 
 }
 
+let sound=document.getElementById("alertSound")
+if(sound)sound.play()
+
 }
+
+function adminAlert(){
+
+let msg=prompt("พิมพ์ข้อความแจ้งเตือน")
+
+if(!msg)return
+
+let advice=" | คำแนะนำ: สวมหน้ากาก N95 หลีกเลี่ยงกิจกรรมกลางแจ้ง"
+
+sendNotification("🚨 แจ้งเตือนคุณภาพอากาศ",msg+advice)
+
+alert("ส่งแจ้งเตือนแล้ว")
 
 }
 
@@ -514,8 +520,6 @@ initMap()
 loadAll()
 
 setInterval(loadAll,300000)
-
-setInterval(checkTimeNotify,60000)
 
 </script>
 
