@@ -3,44 +3,48 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM2.5 ลำปาง Full Research</title>
+<title>PM2.5 ลำปาง Research Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
 body{
-  margin:0;
-  font-family:system-ui;
-  color:white;
-  text-align:center;
-  transition:0.4s;
+margin:0;
+font-family:system-ui;
+color:white;
+text-align:center;
+transition:0.4s;
 }
+
 .card{
-  background:rgba(0,0,0,0.8);
-  margin:15px;
-  padding:20px;
-  border-radius:20px;
+background:rgba(0,0,0,0.8);
+margin:15px;
+padding:20px;
+border-radius:20px;
 }
+
 button{
-  padding:10px 15px;
-  border:none;
-  border-radius:10px;
-  margin:5px;
-  font-size:14px;
-  cursor:pointer;
+padding:10px 15px;
+border:none;
+border-radius:10px;
+margin:5px;
+font-size:14px;
+cursor:pointer;
 }
+
 .refresh{background:#00c853;color:white;}
 .gps{background:#2962ff;color:white;}
 .export{background:#ffc107;color:black;}
+
 .rank{
-  background:#1a1a1a;
-  margin:5px;
-  padding:10px;
-  border-radius:10px;
+background:#1a1a1a;
+margin:5px;
+padding:10px;
+border-radius:10px;
 }
+
 .highlight{
-  border:2px solid #fff;
+border:2px solid white;
 }
 </style>
 </head>
@@ -50,35 +54,66 @@ button{
 <h2>👑 PM2.5 จังหวัดลำปาง</h2>
 
 <div class="card">
+
 <h1 id="pmValue">--</h1>
 <p id="statusText">กำลังโหลด...</p>
 <p id="locationText"></p>
+<p id="aqiText"></p>
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
+
 </div>
 
+
 <div class="card">
-<h3>📊 แนวโน้มย้อนหลัง</h3>
+
+<h3>🩺 คำแนะนำการป้องกันฝุ่น</h3>
+
+<p id="healthAdvice">กำลังโหลด...</p>
+
+</div>
+
+
+<div class="card">
+
+<h3>📊 แนวโน้มฝุ่นในอำเภอ</h3>
+
 <canvas id="chart"></canvas>
+
 <p id="avgText"></p>
+<p id="maxText"></p>
+<p id="minText"></p>
+
 </div>
 
+
 <div class="card">
+
 <h3>🏆 อันดับอำเภอในลำปาง</h3>
+
 <div id="ranking"></div>
+
 </div>
 
+
 <div class="card">
+
 <button class="export" onclick="exportCSV()">📥 Export CSV</button>
+
 </div>
+
 
 <script>
-const token="05dc64914ef2d1b7c4d2678a15450338e660ea53";
-let chart;
-let userDistrict=null;
+
+const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
+
+let chart
+let userDistrict=null
+
 
 const districts={
+
 "เมืองลำปาง":[18.2888,99.4908],
 "แม่เมาะ":[18.2923,99.7567],
 "งาว":[18.7833,99.9667],
@@ -92,106 +127,348 @@ const districts={
 "ห้างฉัตร":[18.3167,99.3500],
 "เมืองปาน":[18.7667,99.4500],
 "แม่ทะ":[18.1000,99.5667]
-};
+
+}
+
 
 function setBG(pm){
-if(pm<=25) document.body.style.background="#2e7d32";
-else if(pm<=50) document.body.style.background="#f9a825";
-else if(pm<=100) document.body.style.background="#ef6c00";
-else if(pm<=150) document.body.style.background="#c62828";
-else document.body.style.background="#6a1b9a";
+
+if(pm<=25) document.body.style.background="#2e7d32"
+
+else if(pm<=50) document.body.style.background="#f9a825"
+
+else if(pm<=100) document.body.style.background="#ef6c00"
+
+else if(pm<=150) document.body.style.background="#c62828"
+
+else document.body.style.background="#6a1b9a"
+
 }
+
 
 function advice(pm){
-if(pm<=25) return "🟢 อากาศดี";
-if(pm<=50) return "🟡 เริ่มมีผลกระทบ";
-if(pm<=100) return "🟠 ควรใส่ N95";
-if(pm<=150) return "🔴 หลีกเลี่ยงกิจกรรมกลางแจ้ง";
-return "🟣 อันตรายมาก";
+
+if(pm<=25) return "🟢 อากาศดี"
+
+if(pm<=50) return "🟡 เริ่มมีผลกระทบ"
+
+if(pm<=100) return "🟠 ควรใส่หน้ากาก N95"
+
+if(pm<=150) return "🔴 หลีกเลี่ยงกิจกรรมกลางแจ้ง"
+
+return "🟣 อันตรายมาก"
+
 }
+
+
+function healthAdvice(pm){
+
+if(pm<=25){
+
+return `
+
+อากาศอยู่ในเกณฑ์ดี
+
+• สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ
+
+• กลุ่มเสี่ยงควรติดตามคุณภาพอากาศ
+
+`
+
+}
+
+
+if(pm<=50){
+
+return `
+
+เริ่มมีผลกระทบต่อสุขภาพบางกลุ่ม
+
+• ผู้ป่วยโรคปอดและโรคหัวใจควรระวัง
+
+• หากออกนอกบ้านควรสวมหน้ากาก
+
+`
+
+}
+
+
+if(pm<=100){
+
+return `
+
+มีผลกระทบต่อสุขภาพ
+
+• ควรสวมหน้ากาก N95
+
+• ลดระยะเวลาทำกิจกรรมกลางแจ้ง
+
+• กลุ่มเสี่ยงควรหลีกเลี่ยงกิจกรรมกลางแจ้ง
+
+`
+
+}
+
+
+if(pm<=150){
+
+return `
+
+เริ่มมีผลกระทบต่อสุขภาพมาก
+
+• สวมหน้ากาก N95 ทุกครั้ง
+
+• หลีกเลี่ยงกิจกรรมกลางแจ้ง
+
+• ปิดประตูหน้าต่างบ้าน
+
+`
+
+}
+
+
+return `
+
+อันตรายต่อสุขภาพอย่างมาก
+
+• หลีกเลี่ยงการออกจากบ้าน
+
+• กลุ่มเสี่ยงควรอยู่ในอาคาร
+
+• ใช้เครื่องฟอกอากาศ
+
+`
+
+}
+
+
+
+function pmToAQI(pm){
+
+return Math.round(pm*4)
+
+}
+
+
 
 async function fetchPM(lat,lon){
-const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`);
-const data=await res.json();
-return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0;
+
+const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
+
+const data=await res.json()
+
+return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+
 }
+
+
 
 async function loadAll(){
-let results=[];
+
+let results=[]
+
 for(const name in districts){
-let [lat,lon]=districts[name];
-let pm=await fetchPM(lat,lon);
-results.push({name,pm});
-}
-results.sort((a,b)=>b.pm-a.pm);
 
-let html="";
+let [lat,lon]=districts[name]
+
+let pm=await fetchPM(lat,lon)
+
+results.push({name,pm})
+
+}
+
+
+results.sort((a,b)=>b.pm-a.pm)
+
+
+let html=""
+
+
 results.forEach((d,i)=>{
-let cls="rank";
-if(d.name===userDistrict) cls+=" highlight";
+
+let cls="rank"
+
+if(d.name===userDistrict) cls+=" highlight"
+
+
 html+=`<div class="${cls}">
+
 ${i+1}. ${d.name} - ${d.pm} µg/m³
-</div>`;
-});
-document.getElementById("ranking").innerHTML=html;
 
-let mainPM=results[0].pm;
-document.getElementById("pmValue").innerText=mainPM+" µg/m³";
-document.getElementById("statusText").innerText=advice(mainPM);
-setBG(mainPM);
+</div>`
 
-loadChart(results.map(r=>r.pm));
+})
+
+
+document.getElementById("ranking").innerHTML=html
+
+
+let values=results.map(r=>r.pm)
+
+
+let mainPM=results[0].pm
+
+let avg=values.reduce((a,b)=>a+b)/values.length
+
+let max=Math.max(...values)
+
+let min=Math.min(...values)
+
+
+document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+
+document.getElementById("statusText").innerText=advice(mainPM)
+
+document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
+
+document.getElementById("aqiText").innerText="AQI ประมาณ: "+pmToAQI(mainPM)
+
+document.getElementById("avgText").innerText="ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)
+
+document.getElementById("maxText").innerText="ค่าสูงสุด: "+max
+
+document.getElementById("minText").innerText="ค่าต่ำสุด: "+min
+
+
+setBG(mainPM)
+
+
+loadChart(values)
+
 }
+
+
 
 function loadChart(data){
-if(chart) chart.destroy();
-chart=new Chart(document.getElementById("chart"),{
+
+if(chart) chart.destroy()
+
+
+chart=new Chart(
+
+document.getElementById("chart"),
+
+{
+
 type:"line",
+
 data:{
+
 labels:Object.keys(districts),
-datasets:[{label:"PM2.5",data:data}]
+
+datasets:[
+
+{
+
+label:"PM2.5",
+
+data:data
+
 }
-});
-let avg=data.reduce((a,b)=>a+b)/data.length;
-document.getElementById("avgText").innerText=
-"ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)+" µg/m³";
+
+]
+
 }
+
+}
+
+)
+
+}
+
+
 
 function useGPS(){
-navigator.geolocation.getCurrentPosition(async pos=>{
-let lat=pos.coords.latitude;
-let lon=pos.coords.longitude;
+
+navigator.geolocation.getCurrentPosition(
+
+async pos=>{
+
+let lat=pos.coords.latitude
+
+let lon=pos.coords.longitude
+
+
 document.getElementById("locationText").innerText=
-"📍 พิกัดปัจจุบัน: "+lat.toFixed(4)+","+lon.toFixed(4);
-userDistrict=findClosest(lat,lon);
-loadAll();
-});
+
+"📍 พิกัด: "+lat.toFixed(4)+","+lon.toFixed(4)
+
+
+userDistrict=findClosest(lat,lon)
+
+
+loadAll()
+
 }
+
+)
+
+}
+
+
 
 function findClosest(lat,lon){
-let min=999999;
-let closest=null;
+
+let min=999999
+
+let closest=null
+
+
 for(const name in districts){
-let [dlat,dlon]=districts[name];
-let dist=Math.hypot(lat-dlat,lon-dlon);
-if(dist<min){min=dist;closest=name;}
+
+let [dlat,dlon]=districts[name]
+
+
+let dist=Math.hypot(lat-dlat,lon-dlon)
+
+
+if(dist<min){
+
+min=dist
+
+closest=name
+
 }
-return closest;
+
 }
+
+
+return closest
+
+}
+
+
 
 function exportCSV(){
-let csv="District,PM2.5\n";
+
+let csv="District,PM2.5\n"
+
+
 document.querySelectorAll(".rank").forEach(el=>{
-csv+=el.innerText.replace(" - ",",")+"\n";
-});
-let blob=new Blob([csv],{type:"text/csv"});
-let a=document.createElement("a");
-a.href=URL.createObjectURL(blob);
-a.download="pm25_lampang_full.csv";
-a.click();
+
+csv+=el.innerText.replace(" - ",",")+"\n"
+
+})
+
+
+let blob=new Blob([csv],{type:"text/csv"})
+
+
+let a=document.createElement("a")
+
+
+a.href=URL.createObjectURL(blob)
+
+a.download="pm25_lampang.csv"
+
+
+a.click()
+
 }
 
-loadAll();
+
+loadAll()
+
 </script>
 
 </body>
