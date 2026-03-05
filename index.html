@@ -63,6 +63,8 @@ margin:6px;
 cursor:pointer;
 font-size:15px;
 transition:0.3s;
+position:relative;
+overflow:hidden;
 }
 
 button:hover{
@@ -71,6 +73,7 @@ transform:scale(1.05);
 
 .refresh{background:#00b894;color:white;}
 .gps{background:#0984e3;color:white;}
+.test{background:#e17055;color:white;}
 
 .rank{
 background:#f1f5f9;
@@ -146,6 +149,7 @@ margin:auto;
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
 <button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
+<button class="test" onclick="testAlert()">🧪 ทดสอบแจ้งเตือน</button>
 
 </div>
 
@@ -199,7 +203,43 @@ let markers=[]
 let userDistrict=null
 let userMarker=null
 let accuracyCircle=null
-let alertPlayed=false
+
+let alarmSound=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
+
+function requestNotification(){
+
+if("Notification" in window){
+
+if(Notification.permission!=="granted"){
+
+Notification.requestPermission()
+
+}
+
+}
+
+}
+
+function sendNotification(pm){
+
+if(Notification.permission==="granted"){
+
+new Notification("🚨 PM2.5 สูง",{
+body:"ค่าฝุ่นตอนนี้ "+pm+" µg/m³ ควรสวมหน้ากาก",
+icon:"https://cdn-icons-png.flaticon.com/512/481/481965.png"
+})
+
+}
+
+alarmSound.play()
+
+}
+
+function testAlert(){
+
+sendNotification(150)
+
+}
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -217,24 +257,27 @@ const districts={
 "แม่ทะ":[18.1000,99.5667]
 }
 
-function playAlertSound(){
+function findDistrict(lat,lon){
 
-const audio=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
-audio.play()
+let minDist=999
+let closest=null
 
-if(navigator.vibrate){
-navigator.vibrate([300,200,300])
+for(const name in districts){
+
+let [dlat,dlon]=districts[name]
+
+let dist=Math.sqrt(
+Math.pow(lat-dlat,2)+Math.pow(lon-dlon,2)
+)
+
+if(dist<minDist){
+minDist=dist
+closest=name
 }
 
-if(Notification.permission==="granted"){
-new Notification("🚨 PM2.5 สูง",{
-body:"ค่าฝุ่นเกินมาตรฐาน",
-icon:"https://cdn-icons-png.flaticon.com/512/4005/4005901.png"
-})
-}else{
-Notification.requestPermission()
 }
 
+return closest
 }
 
 function aqiColor(pm){
@@ -303,20 +346,31 @@ return data.data.iaqi.pm25 ? data.data.iaqi.pm25.v : 0
 
 }
 
-async function fetchAir4Thai(){
-
-const res=await fetch("https://air4thai.pcd.go.th/services/getNewAQI_JSON.php")
-const data=await res.json()
-
-return data.stations.filter(s=>s.province==="ลำปาง")
-
-}
-
 function initMap(){
 
 map=L.map('map').setView([18.3,99.5],9)
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
+}
+
+function animatePM(value){
+
+let el=document.getElementById("pmValue")
+let start=0
+
+let interval=setInterval(()=>{
+
+start+=Math.ceil(value/30)
+
+if(start>=value){
+start=value
+clearInterval(interval)
+}
+
+el.innerText=start+" µg/m³"
+
+},30)
 
 }
 
@@ -337,27 +391,6 @@ results.push({name,pm,lat,lon})
 
 }
 
-const sensors=await fetchAir4Thai()
-
-sensors.forEach(s=>{
-
-if(!s.lat)return
-
-let pm=parseFloat(s.PM25?.value||0)
-
-let circle=L.circle([s.lat,s.long],{
-radius:4000,
-color:aqiColor(pm),
-fillColor:aqiColor(pm),
-fillOpacity:0.8
-}).addTo(map)
-
-.bindPopup(`<b>${s.stationID}</b><br>PM2.5 ${pm}`)
-
-markers.push(circle)
-
-})
-
 results.sort((a,b)=>b.pm-a.pm)
 
 let rankingHTML=""
@@ -374,13 +407,24 @@ if(d.name===userDistrict)cls+=" highlight"
 
 rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
+let circle=L.circle([d.lat,d.lon],{
+radius:7000,
+color:aqiColor(d.pm),
+fillColor:aqiColor(d.pm),
+fillOpacity:0.6,
+weight:d.name===userDistrict?5:2
+}).addTo(map)
+.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}`)
+
+markers.push(circle)
+
 })
 
 document.getElementById("ranking").innerHTML=rankingHTML
 
 let mainPM=results[0].pm
 
-document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+animatePM(mainPM)
 
 document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
 
@@ -392,14 +436,7 @@ if(mainPM>100){
 
 document.getElementById("alertBox").style.display="block"
 
-if(!alertPlayed){
-playAlertSound()
-alertPlayed=true
-}
-
-}else{
-
-alertPlayed=false
+sendNotification(mainPM)
 
 }
 
@@ -433,22 +470,45 @@ navigator.geolocation.getCurrentPosition(async pos=>{
 
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
+let acc=pos.coords.accuracy
+
+userDistrict=findDistrict(lat,lon)
 
 if(userMarker)map.removeLayer(userMarker)
+if(accuracyCircle)map.removeLayer(accuracyCircle)
 
 userMarker=L.marker([lat,lon]).addTo(map)
 .bindPopup("📍 ตำแหน่งของคุณ")
 .openPopup()
 
+let icon=userMarker._icon
+if(icon){
+icon.style.animation="bounce 1.2s infinite"
+}
+
+accuracyCircle=L.circle([lat,lon],{
+radius:acc,
+color:"#0984e3",
+fillColor:"#74b9ff",
+fillOpacity:0.3
+}).addTo(map)
+
 map.setView([lat,lon],13)
 
 loadAll()
+
+const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+const data=await geo.json()
+
+document.getElementById("locationText").innerText=
+"📍 "+data.display_name
 
 })
 
 }
 
 initMap()
+requestNotification()
 loadAll()
 
 setInterval(loadAll,300000)
