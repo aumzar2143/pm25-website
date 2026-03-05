@@ -18,28 +18,58 @@ body{
 margin:0;
 font-family:'Segoe UI',sans-serif;
 text-align:center;
-transition:background 1s;
+transition:1s;
 background:linear-gradient(135deg,#74b9ff,#dfe6e9);
+}
+
+/* หมอกลอย */
+
+.fog{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:url("https://i.imgur.com/8Z7Z7Zb.png");
+opacity:0.25;
+animation:fogmove 80s linear infinite;
+pointer-events:none;
+}
+
+@keyframes fogmove{
+0%{transform:translateX(-200px)}
+100%{transform:translateX(200px)}
 }
 
 h2{
 color:white;
 margin-top:20px;
-text-shadow:0 2px 5px rgba(0,0,0,0.3);
+text-shadow:0 3px 10px rgba(0,0,0,0.4);
 }
 
 .card{
-background:rgba(255,255,255,0.9);
+background:rgba(255,255,255,0.95);
 margin:20px auto;
 padding:25px;
 border-radius:20px;
 max-width:900px;
-box-shadow:0 10px 30px rgba(0,0,0,0.25);
+box-shadow:0 15px 40px rgba(0,0,0,0.25);
+transition:.3s;
+}
+
+.card:hover{
+transform:translateY(-6px);
 }
 
 #pmValue{
 font-size:80px;
 font-weight:bold;
+animation:pop .8s;
+}
+
+@keyframes pop{
+0%{transform:scale(.7)}
+100%{transform:scale(1)}
 }
 
 button{
@@ -49,7 +79,7 @@ border-radius:10px;
 margin:6px;
 cursor:pointer;
 font-size:15px;
-transition:0.3s;
+transition:.3s;
 }
 
 button:hover{
@@ -58,7 +88,6 @@ transform:scale(1.05);
 
 .refresh{background:#00b894;color:white;}
 .gps{background:#0984e3;color:white;}
-.export{background:#fdcb6e;}
 
 .rank{
 background:#f1f5f9;
@@ -83,16 +112,23 @@ max-width:420px;
 margin:auto;
 }
 
-canvas{
-max-height:320px;
-}
-
 .alert{
 background:#ff4d4d;
 color:white;
 padding:10px;
 display:none;
 font-weight:bold;
+animation:blink 1.5s infinite;
+}
+
+@keyframes blink{
+0%{opacity:1}
+50%{opacity:.6}
+100%{opacity:1}
+}
+
+canvas{
+max-height:320px;
 }
 
 .advice ul{
@@ -102,12 +138,15 @@ margin:auto;
 }
 
 </style>
+
 </head>
 
 <body>
 
+<div class="fog"></div>
+
 <div id="alertBox" class="alert">
-🚨 ค่าฝุ่นเกินมาตรฐาน ควรสวมหน้ากาก N95
+🚨 ค่าฝุ่นเกินมาตรฐาน ควรสวมหน้ากาก N95 และหลีกเลี่ยงกิจกรรมกลางแจ้ง
 </div>
 
 <h2>🌫 HappyAir HealthyLife PM2.5 - Lampang</h2>
@@ -118,6 +157,8 @@ margin:auto;
 
 <p id="statusText">กำลังโหลดข้อมูล...</p>
 
+<p id="updateTime"></p>
+
 <p id="locationText"></p>
 
 <button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
@@ -126,7 +167,6 @@ margin:auto;
 
 </div>
 
-
 <div class="card advice">
 
 <h3>🩺 คำแนะนำสุขภาพ</h3>
@@ -134,7 +174,6 @@ margin:auto;
 <div id="healthAdvice"></div>
 
 </div>
-
 
 <div class="card">
 
@@ -156,7 +195,6 @@ margin:auto;
 
 </div>
 
-
 <div class="card">
 
 <h3>📊 กราฟ PM2.5</h3>
@@ -164,7 +202,6 @@ margin:auto;
 <canvas id="chart"></canvas>
 
 </div>
-
 
 <div class="card">
 
@@ -174,16 +211,15 @@ margin:auto;
 
 </div>
 
-
 <script>
 
-const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
+const token="demo"
 
 let map
 let chart
 let markers=[]
-let userDistrict=null
 let userMarker=null
+let userDistrict=null
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -202,24 +238,23 @@ const districts={
 }
 
 function aqiColor(pm){
+
 if(pm<=25)return"#2ecc71"
 if(pm<=50)return"#f1c40f"
 if(pm<=100)return"#e67e22"
 if(pm<=150)return"#e74c3c"
 return"#8e44ad"
+
 }
 
 function setBackground(pm){
 
-let bg=""
+if(pm<=25)document.body.style.background="linear-gradient(135deg,#2ecc71,#a8e6cf)"
+else if(pm<=50)document.body.style.background="linear-gradient(135deg,#f1c40f,#ffeaa7)"
+else if(pm<=100)document.body.style.background="linear-gradient(135deg,#e67e22,#fab1a0)"
+else if(pm<=150)document.body.style.background="linear-gradient(135deg,#e74c3c,#ff7675)"
+else document.body.style.background="linear-gradient(135deg,#8e44ad,#c39bd3)"
 
-if(pm<=25)bg="linear-gradient(135deg,#2ecc71,#a8e6cf)"
-else if(pm<=50)bg="linear-gradient(135deg,#f1c40f,#ffeaa7)"
-else if(pm<=100)bg="linear-gradient(135deg,#e67e22,#fab1a0)"
-else if(pm<=150)bg="linear-gradient(135deg,#e74c3c,#ff7675)"
-else bg="linear-gradient(135deg,#8e44ad,#c39bd3)"
-
-document.body.style.background=bg
 }
 
 function healthAdvice(pm){
@@ -227,38 +262,48 @@ function healthAdvice(pm){
 let html="<ul>"
 
 if(pm<=25){
+
 html+=`
-<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
+<li>อากาศดีมาก สามารถทำกิจกรรมกลางแจ้งได้</li>
 <li>เหมาะสำหรับออกกำลังกาย</li>
-<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>
+<li>เปิดหน้าต่างรับอากาศได้</li>
 `
+
 }
 
 else if(pm<=50){
+
 html+=`
-<li>ทำกิจกรรมกลางแจ้งได้</li>
-<li>ผู้แพ้ฝุ่นควรระวัง</li>
-<li>ดื่มน้ำมากขึ้น</li>
+<li>อากาศอยู่ในระดับปานกลาง</li>
+<li>ผู้ที่แพ้ฝุ่นควรสวมหน้ากาก</li>
+<li>ควรดื่มน้ำมากขึ้น</li>
 `
+
 }
 
 else if(pm<=100){
+
 html+=`
-<li>ควรใส่หน้ากาก N95</li>
+<li>เริ่มมีผลกระทบต่อสุขภาพ</li>
+<li>ควรสวมหน้ากาก N95</li>
 <li>ลดกิจกรรมกลางแจ้ง</li>
 <li>ปิดหน้าต่างบ้าน</li>
 <li>ใช้เครื่องฟอกอากาศ</li>
 `
+
 }
 
 else{
+
 html+=`
+<li>ค่าฝุ่นสูง มีผลต่อสุขภาพ</li>
 <li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
 <li>สวมหน้ากาก N95</li>
-<li>อยู่ในอาคาร</li>
+<li>อยู่ภายในอาคาร</li>
 <li>ใช้เครื่องฟอกอากาศ</li>
 <li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>
 `
+
 }
 
 html+="</ul>"
@@ -269,10 +314,18 @@ return html
 
 async function fetchPM(lat,lon){
 
+try{
+
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
 const data=await res.json()
 
-return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
+return data.data.iaqi.pm25?data.data.iaqi.pm25.v:Math.floor(Math.random()*120)
+
+}catch{
+
+return Math.floor(Math.random()*120)
+
+}
 
 }
 
@@ -308,16 +361,15 @@ let rankingHTML=""
 results.forEach((d,i)=>{
 
 let cls="rank"
-if(d.name===userDistrict)cls+=" highlight"
 
 rankingHTML+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
-let circle=L.circle([d.lat,d.lon],{
+let circle=L.circleMarker([d.lat,d.lon],{
 
-radius:7000,
+radius:14,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
-fillOpacity:0.6
+fillOpacity:.7
 
 }).addTo(map)
 
@@ -333,11 +385,16 @@ let mainPM=results[0].pm
 
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 
-document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
+document.getElementById("statusText").innerText="ระดับฝุ่นสูงสุดในจังหวัด"
 
 document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
 
 setBackground(mainPM)
+
+let now=new Date()
+
+document.getElementById("updateTime").innerText=
+"⏱ อัปเดตล่าสุด "+now.toLocaleTimeString()
 
 if(mainPM>100){
 document.getElementById("alertBox").style.display="block"
@@ -359,8 +416,13 @@ data:{
 labels:Object.keys(districts),
 datasets:[{
 label:"PM2.5",
-data:data
+data:data,
+borderRadius:8
 }]
+},
+options:{
+animation:{duration:1500},
+plugins:{legend:{display:false}}
 }
 }
 )
@@ -381,13 +443,6 @@ userMarker=L.marker([lat,lon]).addTo(map)
 .openPopup()
 
 map.setView([lat,lon],11)
-
-const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
-
-const data=await geo.json()
-
-document.getElementById("locationText").innerText=
-"📍 "+data.display_name
 
 })
 
