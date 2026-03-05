@@ -28,8 +28,6 @@ margin:auto;
 padding:20px;
 }
 
-h1{text-align:center}
-
 .grid{
 display:grid;
 grid-template-columns:1fr 1fr;
@@ -66,12 +64,14 @@ padding:10px;
 border-radius:8px;
 }
 
-@media(max-width:900px){
+.highlight{
+border:2px solid white;
+}
 
+@media(max-width:900px){
 .grid{
 grid-template-columns:1fr;
 }
-
 }
 
 </style>
@@ -94,42 +94,32 @@ grid-template-columns:1fr;
 </div>
 
 <div class="card">
-
 <h3>🩺 คำแนะนำการป้องกันฝุ่น (กรมอนามัย)</h3>
-<p id="healthAdvice">กำลังโหลด...</p>
-
+<p id="healthAdvice"></p>
 </div>
 
 <div class="card">
-
-<h3>🗺 แผนที่ Heatmap ฝุ่น</h3>
+<h3>🗺 แผนที่ฝุ่น PM2.5</h3>
 <div id="map"></div>
-
 </div>
 
 <div class="grid">
 
 <div class="card">
-
 <h3>📈 แนวโน้ม PM2.5</h3>
 <canvas id="lineChart"></canvas>
-
 </div>
 
 <div class="card">
-
 <h3>📊 เปรียบเทียบอำเภอ</h3>
 <canvas id="barChart"></canvas>
-
 </div>
 
 </div>
 
 <div class="card">
-
 <h3>🏆 อันดับอำเภอ</h3>
 <div id="ranking"></div>
-
 </div>
 
 </div>
@@ -139,13 +129,15 @@ grid-template-columns:1fr;
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
+let map=L.map('map').setView([18.3,99.5],9)
+let heatLayer
 let lineChart
 let barChart
-let heatLayer
-
-let map=L.map('map').setView([18.3,99.5],9)
+let userDistrict=null
+let userMarker=null
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
 
 const districts={
 
@@ -165,77 +157,35 @@ const districts={
 
 }
 
-function advice(pm){
 
-if(pm<=25) return "🟢 อากาศดี"
+function getColor(pm){
 
-if(pm<=50) return "🟡 เริ่มมีผลกระทบ"
-
-if(pm<=100) return "🟠 มีผลต่อสุขภาพ"
-
-if(pm<=150) return "🔴 เริ่มอันตราย"
-
-return "🟣 อันตรายมาก"
+if(pm<=25) return "green"
+if(pm<=50) return "yellow"
+if(pm<=100) return "orange"
+if(pm<=150) return "red"
+return "purple"
 
 }
 
 function healthAdvice(pm){
 
-if(pm<=25){
+if(pm<=25)
+return "อากาศดี สามารถทำกิจกรรมกลางแจ้งได้"
 
-return `
-อากาศอยู่ในเกณฑ์ดี
+if(pm<=50)
+return "กลุ่มเสี่ยงควรสวมหน้ากาก"
 
-• สามารถทำกิจกรรมกลางแจ้งได้
-• เปิดบ้านระบายอากาศได้
-`
+if(pm<=100)
+return "ควรสวมหน้ากาก N95 และลดกิจกรรมกลางแจ้ง"
 
-}
+if(pm<=150)
+return "หลีกเลี่ยงกิจกรรมกลางแจ้งและปิดบ้าน"
 
-if(pm<=50){
-
-return `
-เริ่มมีผลกระทบต่อสุขภาพ
-
-• กลุ่มเสี่ยงควรระวัง
-• หากออกนอกบ้านควรสวมหน้ากาก
-`
+return "อันตรายต่อสุขภาพ ควรอยู่ในอาคาร"
 
 }
 
-if(pm<=100){
-
-return `
-มีผลกระทบต่อสุขภาพ
-
-• สวมหน้ากาก N95
-• ลดกิจกรรมกลางแจ้ง
-• กลุ่มเสี่ยงควรหลีกเลี่ยงฝุ่น
-`
-
-}
-
-if(pm<=150){
-
-return `
-เริ่มอันตรายต่อสุขภาพ
-
-• สวมหน้ากาก N95 ทุกครั้ง
-• หลีกเลี่ยงกิจกรรมกลางแจ้ง
-• ปิดประตูหน้าต่างบ้าน
-`
-
-}
-
-return `
-อันตรายต่อสุขภาพ
-
-• หลีกเลี่ยงออกจากบ้าน
-• ใช้เครื่องฟอกอากาศ
-• กลุ่มเสี่ยงควรอยู่ในอาคาร
-`
-
-}
 
 async function fetchPM(lat,lon){
 
@@ -245,6 +195,30 @@ let data=await res.json()
 return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
 
 }
+
+
+function findClosest(lat,lon){
+
+let min=999999
+let closest=null
+
+for(const name in districts){
+
+let [dlat,dlon]=districts[name]
+
+let dist=Math.hypot(lat-dlat,lon-dlon)
+
+if(dist<min){
+min=dist
+closest=name
+}
+
+}
+
+return closest
+
+}
+
 
 async function loadAll(){
 
@@ -261,6 +235,11 @@ results.push({name,pm,lat,lon})
 
 heatData.push([lat,lon,pm/150])
 
+L.circleMarker([lat,lon],{
+radius:8,
+color:getColor(pm)
+}).addTo(map).bindPopup(`${name}<br>PM2.5: ${pm}`)
+
 }
 
 results.sort((a,b)=>b.pm-a.pm)
@@ -269,7 +248,12 @@ let html=""
 
 results.forEach((d,i)=>{
 
-html+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
+let cls="rank"
+
+if(d.name===userDistrict)
+cls+=" highlight"
+
+html+=`<div class="${cls}">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 })
 
@@ -281,14 +265,14 @@ let values=results.map(r=>r.pm)
 let mainPM=results[0].pm
 
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
-document.getElementById("statusText").innerText=advice(mainPM)
+document.getElementById("statusText").innerText="สถานะ: "+mainPM
 document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
 createCharts(labels,values)
-
 createHeatmap(heatData)
 
 }
+
 
 function createCharts(labels,data){
 
@@ -299,10 +283,7 @@ lineChart=new Chart(
 document.getElementById("lineChart"),
 {
 type:"line",
-data:{
-labels:labels,
-datasets:[{label:"PM2.5",data:data}]
-}
+data:{labels:labels,datasets:[{label:"PM2.5",data:data}]}
 }
 )
 
@@ -310,14 +291,12 @@ barChart=new Chart(
 document.getElementById("barChart"),
 {
 type:"bar",
-data:{
-labels:labels,
-datasets:[{label:"PM2.5",data:data}]
-}
+data:{labels:labels,datasets:[{label:"PM2.5",data:data}]}
 }
 )
 
 }
+
 
 function createHeatmap(data){
 
@@ -325,10 +304,18 @@ if(heatLayer) map.removeLayer(heatLayer)
 
 heatLayer=L.heatLayer(data,{
 radius:35,
-blur:25
+blur:25,
+gradient:{
+0.2:"green",
+0.4:"yellow",
+0.6:"orange",
+0.8:"red",
+1:"purple"
+}
 }).addTo(map)
 
 }
+
 
 function useGPS(){
 
@@ -339,15 +326,22 @@ pos=>{
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
+userDistrict=findClosest(lat,lon)
+
 map.setView([lat,lon],11)
 
-L.marker([lat,lon]).addTo(map)
+if(userMarker) map.removeLayer(userMarker)
+
+userMarker=L.marker([lat,lon]).addTo(map).bindPopup("ตำแหน่งของคุณ")
+
+loadAll()
 
 }
 
 )
 
 }
+
 
 loadAll()
 
