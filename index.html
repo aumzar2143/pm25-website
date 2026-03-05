@@ -1,233 +1,13 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>HappyAir HealthyLife PM2.5 - Lampang</title>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
-<style>
-
-body{
-margin:0;
-font-family:'Segoe UI',sans-serif;
-text-align:center;
-transition:background 1s;
-background:linear-gradient(135deg,#74b9ff,#dfe6e9);
-overflow-x:hidden;
-}
-
-canvas#particles{
-position:fixed;
-top:0;
-left:0;
-pointer-events:none;
-z-index:-1;
-}
-
-h2{
-color:white;
-margin-top:20px;
-text-shadow:0 2px 5px rgba(0,0,0,0.3);
-}
-
-.card{
-background:rgba(255,255,255,0.92);
-margin:20px auto;
-padding:25px;
-border-radius:20px;
-max-width:900px;
-box-shadow:0 10px 30px rgba(0,0,0,0.25);
-animation:fadeUp 0.8s ease;
-}
-
-@keyframes fadeUp{
-from{opacity:0;transform:translateY(30px);}
-to{opacity:1;transform:translateY(0);}
-}
-
-#pmValue{
-font-size:80px;
-font-weight:bold;
-}
-
-button{
-padding:10px 16px;
-border:none;
-border-radius:10px;
-margin:6px;
-cursor:pointer;
-font-size:15px;
-transition:0.3s;
-position:relative;
-overflow:hidden;
-}
-
-button:hover{
-transform:scale(1.05);
-}
-
-button:after{
-content:"";
-position:absolute;
-width:0;
-height:0;
-background:rgba(255,255,255,0.4);
-border-radius:50%;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-transition:0.6s;
-}
-
-button:active:after{
-width:200px;
-height:200px;
-opacity:0;
-}
-
-.refresh{background:#00b894;color:white;}
-.gps{background:#0984e3;color:white;}
-
-.rank{
-background:#f1f5f9;
-padding:12px;
-margin:6px;
-border-radius:10px;
-}
-
-#map{
-height:420px;
-border-radius:15px;
-}
-
-.alert{
-background:#ff4d4d;
-color:white;
-padding:10px;
-display:none;
-font-weight:bold;
-animation:pulseAlert 1s infinite;
-}
-
-@keyframes pulseAlert{
-0%{transform:scale(1);}
-50%{transform:scale(1.05);}
-100%{transform:scale(1);}
-}
-
-.sensor{
-animation:pulseSensor 2s infinite;
-}
-
-@keyframes pulseSensor{
-0%{opacity:0.6;}
-50%{opacity:1;}
-100%{opacity:0.6;}
-}
-
-.legend{
-text-align:left;
-max-width:420px;
-margin:auto;
-}
-
-#advice ul{
-text-align:left;
-max-width:600px;
-margin:auto;
-}
-
-#loading{
-display:none;
-font-size:18px;
-margin:10px;
-}
-
-</style>
-</head>
-
-<body>
-
-<canvas id="particles"></canvas>
-
-<div id="alertBox" class="alert">
-🚨 ค่าฝุ่นเกินมาตรฐาน ควรสวมหน้ากาก N95
-</div>
-
-<h2>🌫 HappyAir HealthyLife PM2.5 - Lampang</h2>
-
-<div id="loading">⏳ กำลังโหลดข้อมูล...</div>
-
-<div class="card">
-
-<canvas id="gauge"></canvas>
-
-<div id="pmValue">--</div>
-
-<p id="statusText">กำลังโหลดข้อมูล...</p>
-
-<p id="locationText"></p>
-
-<button class="refresh" onclick="loadAll()">🔄 รีเฟรช</button>
-<button class="gps" onclick="useGPS()">📍 ใช้ตำแหน่งปัจจุบัน</button>
-
-</div>
-
-<div class="card">
-
-<h3>🩺 คำแนะนำสุขภาพ</h3>
-<div id="advice"></div>
-
-</div>
-
-<div class="card">
-
-<h3>🗺 แผนที่คุณภาพอากาศ</h3>
-<div id="map"></div>
-
-<div class="legend">
-<b>ระดับคุณภาพอากาศ</b>
-<div>🟢 0-25 ดี</div>
-<div>🟡 26-50 ปานกลาง</div>
-<div>🟠 51-100 เริ่มกระทบ</div>
-<div>🔴 101-150 มีผลต่อสุขภาพ</div>
-<div>🟣 151+ อันตราย</div>
-</div>
-
-</div>
-
-<div class="card">
-
-<h3>📊 กราฟ PM2.5</h3>
-<canvas id="chart"></canvas>
-
-</div>
-
-<div class="card">
-
-<h3>🏆 อันดับอำเภอ</h3>
-<div id="ranking"></div>
-
-</div>
-
 <script>
 
 const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
 let map
 let chart
-let gauge
-let heat
 let markers=[]
+let userMarker=null
+
+let alertSound=new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg")
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -256,15 +36,17 @@ return"#8e44ad"
 function animatePM(value){
 
 let start=0
-let step=value/60
+let end=value
+let duration=1000
+let step=end/(duration/16)
 
-let interval=setInterval(()=>{
+let counter=setInterval(()=>{
 
 start+=step
 
-if(start>=value){
-start=value
-clearInterval(interval)
+if(start>=end){
+start=end
+clearInterval(counter)
 }
 
 document.getElementById("pmValue").innerText=
@@ -279,29 +61,38 @@ function healthAdvice(pm){
 let html="<ul>"
 
 if(pm<=25){
-html+="<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>"
-html+="<li>เหมาะสำหรับออกกำลังกาย</li>"
+html+=`
+<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
+<li>เหมาะสำหรับออกกำลังกาย</li>
+<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>`
 }
 
 else if(pm<=50){
-html+="<li>อากาศปานกลาง</li>"
-html+="<li>ผู้แพ้ฝุ่นควรระวัง</li>"
+html+=`
+<li>ทำกิจกรรมกลางแจ้งได้</li>
+<li>ผู้แพ้ฝุ่นควรระวัง</li>
+<li>ดื่มน้ำมากขึ้น</li>`
 }
 
 else if(pm<=100){
-html+="<li>ควรใส่หน้ากาก N95</li>"
-html+="<li>ลดกิจกรรมกลางแจ้ง</li>"
+html+=`
+<li>ควรใส่หน้ากาก N95</li>
+<li>ลดกิจกรรมกลางแจ้ง</li>
+<li>ปิดหน้าต่างบ้าน</li>
+<li>ใช้เครื่องฟอกอากาศ</li>`
 }
 
 else{
-html+="<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>"
-html+="<li>สวมหน้ากาก N95</li>"
+html+=`
+<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
+<li>สวมหน้ากาก N95</li>
+<li>อยู่ในอาคาร</li>
+<li>ใช้เครื่องฟอกอากาศ</li>
+<li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>`
 }
 
 html+="</ul>"
-
 return html
-
 }
 
 async function fetchPM(lat,lon){
@@ -342,23 +133,23 @@ results.push({name,pm,lat,lon})
 
 results.sort((a,b)=>b.pm-a.pm)
 
-let heatData=[]
-
 let rankingHTML=""
 
 results.forEach((d,i)=>{
 
-heatData.push([d.lat,d.lon,d.pm])
-
 rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
-let circle=L.circleMarker([d.lat,d.lon],{
-radius:15,
+let circle=L.circle([d.lat,d.lon],{
+
+radius:3000,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
-fillOpacity:0.8,
+fillOpacity:0.5,
+weight:2,
 className:"sensor"
+
 }).addTo(map)
+.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm} µg/m³`)
 
 markers.push(circle)
 
@@ -366,24 +157,27 @@ markers.push(circle)
 
 document.getElementById("ranking").innerHTML=rankingHTML
 
-if(heat)map.removeLayer(heat)
-
-heat=L.heatLayer(heatData,{radius:35}).addTo(map)
-
 let mainPM=results[0].pm
 
 animatePM(mainPM)
 
-document.getElementById("statusText").innerText="ระดับฝุ่น "+mainPM
+document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
 
-document.getElementById("advice").innerHTML=healthAdvice(mainPM)
+document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
 
-if(mainPM>100)
+if(mainPM>100){
+
 document.getElementById("alertBox").style.display="block"
 
-loadChart(results.map(r=>r.pm))
+alertSound.play()
 
-loadGauge(mainPM)
+}else{
+
+document.getElementById("alertBox").style.display="none"
+
+}
+
+loadChart(results.map(r=>r.pm))
 
 document.getElementById("loading").style.display="none"
 
@@ -393,7 +187,9 @@ function loadChart(data){
 
 if(chart)chart.destroy()
 
-chart=new Chart(document.getElementById("chart"),{
+chart=new Chart(
+document.getElementById("chart"),
+{
 type:"bar",
 data:{
 labels:Object.keys(districts),
@@ -401,42 +197,24 @@ datasets:[{
 label:"PM2.5",
 data:data
 }]
-},
-options:{animation:true}
-})
-
 }
-
-function loadGauge(pm){
-
-if(gauge)gauge.destroy()
-
-gauge=new Chart(document.getElementById("gauge"),{
-type:"doughnut",
-data:{
-datasets:[{
-data:[pm,200-pm],
-backgroundColor:[aqiColor(pm),"#ecf0f1"]
-}]
-},
-options:{
-circumference:180,
-rotation:270,
-plugins:{legend:{display:false}}
 }
-})
+)
 
 }
 
 function useGPS(){
 
-navigator.geolocation.getCurrentPosition(pos=>{
+navigator.geolocation.getCurrentPosition(async pos=>{
 
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
-L.marker([lat,lon]).addTo(map)
+if(userMarker)map.removeLayer(userMarker)
+
+userMarker=L.marker([lat,lon]).addTo(map)
 .bindPopup("ตำแหน่งของคุณ")
+.openPopup()
 
 map.setView([lat,lon],11)
 
@@ -449,50 +227,4 @@ loadAll()
 
 setInterval(loadAll,300000)
 
-
-// particle dust effect
-
-const canvas=document.getElementById("particles")
-const ctx=canvas.getContext("2d")
-
-canvas.width=window.innerWidth
-canvas.height=window.innerHeight
-
-let particles=[]
-
-for(let i=0;i<80;i++){
-particles.push({
-x:Math.random()*canvas.width,
-y:Math.random()*canvas.height,
-r:Math.random()*2,
-v:Math.random()*0.5
-})
-}
-
-function drawParticles(){
-
-ctx.clearRect(0,0,canvas.width,canvas.height)
-
-particles.forEach(p=>{
-
-ctx.beginPath()
-ctx.arc(p.x,p.y,p.r,0,Math.PI*2)
-ctx.fillStyle="rgba(255,255,255,0.3)"
-ctx.fill()
-
-p.y+=p.v
-
-if(p.y>canvas.height)p.y=0
-
-})
-
-requestAnimationFrame(drawParticles)
-
-}
-
-drawParticles()
-
 </script>
-
-</body>
-</html>
