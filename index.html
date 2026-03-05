@@ -12,6 +12,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
 <style>
 
 body{
@@ -20,6 +22,15 @@ font-family:'Segoe UI',sans-serif;
 text-align:center;
 transition:background 1s;
 background:linear-gradient(135deg,#74b9ff,#dfe6e9);
+overflow-x:hidden;
+}
+
+canvas#particles{
+position:fixed;
+top:0;
+left:0;
+pointer-events:none;
+z-index:-1;
 }
 
 h2{
@@ -29,7 +40,7 @@ text-shadow:0 2px 5px rgba(0,0,0,0.3);
 }
 
 .card{
-background:rgba(255,255,255,0.9);
+background:rgba(255,255,255,0.92);
 margin:20px auto;
 padding:25px;
 border-radius:20px;
@@ -93,24 +104,9 @@ margin:6px;
 border-radius:10px;
 }
 
-.highlight{
-border:2px solid #0984e3;
-background:#eaf4ff;
-}
-
 #map{
 height:420px;
 border-radius:15px;
-}
-
-.legend{
-text-align:left;
-max-width:420px;
-margin:auto;
-}
-
-canvas{
-max-height:320px;
 }
 
 .alert{
@@ -138,7 +134,13 @@ animation:pulseSensor 2s infinite;
 100%{opacity:0.6;}
 }
 
-.advice ul{
+.legend{
+text-align:left;
+max-width:420px;
+margin:auto;
+}
+
+#advice ul{
 text-align:left;
 max-width:600px;
 margin:auto;
@@ -155,6 +157,8 @@ margin:10px;
 
 <body>
 
+<canvas id="particles"></canvas>
+
 <div id="alertBox" class="alert">
 🚨 ค่าฝุ่นเกินมาตรฐาน ควรสวมหน้ากาก N95
 </div>
@@ -164,6 +168,8 @@ margin:10px;
 <div id="loading">⏳ กำลังโหลดข้อมูล...</div>
 
 <div class="card">
+
+<canvas id="gauge"></canvas>
 
 <div id="pmValue">--</div>
 
@@ -176,29 +182,25 @@ margin:10px;
 
 </div>
 
-<div class="card advice">
+<div class="card">
 
 <h3>🩺 คำแนะนำสุขภาพ</h3>
-<div id="healthAdvice"></div>
+<div id="advice"></div>
 
 </div>
 
 <div class="card">
 
 <h3>🗺 แผนที่คุณภาพอากาศ</h3>
-
 <div id="map"></div>
 
 <div class="legend">
-
 <b>ระดับคุณภาพอากาศ</b>
-
-<div>🟢 0-25 อากาศดี</div>
+<div>🟢 0-25 ดี</div>
 <div>🟡 26-50 ปานกลาง</div>
-<div>🟠 51-100 เริ่มมีผลกระทบ</div>
+<div>🟠 51-100 เริ่มกระทบ</div>
 <div>🔴 101-150 มีผลต่อสุขภาพ</div>
-<div>🟣 151+ อันตรายมาก</div>
-
+<div>🟣 151+ อันตราย</div>
 </div>
 
 </div>
@@ -223,8 +225,9 @@ const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
 let map
 let chart
+let gauge
+let heat
 let markers=[]
-let userMarker=null
 
 const districts={
 "เมืองลำปาง":[18.2888,99.4908],
@@ -253,17 +256,15 @@ return"#8e44ad"
 function animatePM(value){
 
 let start=0
-let end=value
-let duration=1000
-let step=end/(duration/16)
+let step=value/60
 
-let counter=setInterval(()=>{
+let interval=setInterval(()=>{
 
 start+=step
 
-if(start>=end){
-start=end
-clearInterval(counter)
+if(start>=value){
+start=value
+clearInterval(interval)
 }
 
 document.getElementById("pmValue").innerText=
@@ -278,34 +279,29 @@ function healthAdvice(pm){
 let html="<ul>"
 
 if(pm<=25){
-html+=`<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>
-<li>เหมาะสำหรับออกกำลังกาย</li>
-<li>เด็กและผู้สูงอายุใช้ชีวิตได้ปกติ</li>`
+html+="<li>อากาศดี สามารถทำกิจกรรมกลางแจ้งได้</li>"
+html+="<li>เหมาะสำหรับออกกำลังกาย</li>"
 }
 
 else if(pm<=50){
-html+=`<li>ทำกิจกรรมกลางแจ้งได้</li>
-<li>ผู้แพ้ฝุ่นควรระวัง</li>
-<li>ดื่มน้ำมากขึ้น</li>`
+html+="<li>อากาศปานกลาง</li>"
+html+="<li>ผู้แพ้ฝุ่นควรระวัง</li>"
 }
 
 else if(pm<=100){
-html+=`<li>ควรใส่หน้ากาก N95</li>
-<li>ลดกิจกรรมกลางแจ้ง</li>
-<li>ปิดหน้าต่างบ้าน</li>
-<li>ใช้เครื่องฟอกอากาศ</li>`
+html+="<li>ควรใส่หน้ากาก N95</li>"
+html+="<li>ลดกิจกรรมกลางแจ้ง</li>"
 }
 
 else{
-html+=`<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>
-<li>สวมหน้ากาก N95</li>
-<li>อยู่ในอาคาร</li>
-<li>ใช้เครื่องฟอกอากาศ</li>
-<li>เด็ก ผู้สูงอายุ และผู้ป่วยโรคปอดควรระวัง</li>`
+html+="<li>หลีกเลี่ยงกิจกรรมกลางแจ้ง</li>"
+html+="<li>สวมหน้ากาก N95</li>"
 }
 
 html+="</ul>"
+
 return html
+
 }
 
 async function fetchPM(lat,lon){
@@ -346,22 +342,23 @@ results.push({name,pm,lat,lon})
 
 results.sort((a,b)=>b.pm-a.pm)
 
+let heatData=[]
+
 let rankingHTML=""
 
 results.forEach((d,i)=>{
 
+heatData.push([d.lat,d.lon,d.pm])
+
 rankingHTML+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
 let circle=L.circleMarker([d.lat,d.lon],{
-
 radius:15,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
 fillOpacity:0.8,
 className:"sensor"
-
 }).addTo(map)
-.bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}`)
 
 markers.push(circle)
 
@@ -369,19 +366,24 @@ markers.push(circle)
 
 document.getElementById("ranking").innerHTML=rankingHTML
 
+if(heat)map.removeLayer(heat)
+
+heat=L.heatLayer(heatData,{radius:35}).addTo(map)
+
 let mainPM=results[0].pm
 
 animatePM(mainPM)
 
-document.getElementById("statusText").innerText="ระดับอากาศ: "+mainPM
+document.getElementById("statusText").innerText="ระดับฝุ่น "+mainPM
 
-document.getElementById("healthAdvice").innerHTML=healthAdvice(mainPM)
+document.getElementById("advice").innerHTML=healthAdvice(mainPM)
 
-if(mainPM>100){
+if(mainPM>100)
 document.getElementById("alertBox").style.display="block"
-}
 
 loadChart(results.map(r=>r.pm))
+
+loadGauge(mainPM)
 
 document.getElementById("loading").style.display="none"
 
@@ -391,9 +393,7 @@ function loadChart(data){
 
 if(chart)chart.destroy()
 
-chart=new Chart(
-document.getElementById("chart"),
-{
+chart=new Chart(document.getElementById("chart"),{
 type:"bar",
 data:{
 labels:Object.keys(districts),
@@ -401,24 +401,42 @@ datasets:[{
 label:"PM2.5",
 data:data
 }]
+},
+options:{animation:true}
+})
+
 }
+
+function loadGauge(pm){
+
+if(gauge)gauge.destroy()
+
+gauge=new Chart(document.getElementById("gauge"),{
+type:"doughnut",
+data:{
+datasets:[{
+data:[pm,200-pm],
+backgroundColor:[aqiColor(pm),"#ecf0f1"]
+}]
+},
+options:{
+circumference:180,
+rotation:270,
+plugins:{legend:{display:false}}
 }
-)
+})
 
 }
 
 function useGPS(){
 
-navigator.geolocation.getCurrentPosition(async pos=>{
+navigator.geolocation.getCurrentPosition(pos=>{
 
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 
-if(userMarker)map.removeLayer(userMarker)
-
-userMarker=L.marker([lat,lon]).addTo(map)
+L.marker([lat,lon]).addTo(map)
 .bindPopup("ตำแหน่งของคุณ")
-.openPopup()
 
 map.setView([lat,lon],11)
 
@@ -430,6 +448,49 @@ initMap()
 loadAll()
 
 setInterval(loadAll,300000)
+
+
+// particle dust effect
+
+const canvas=document.getElementById("particles")
+const ctx=canvas.getContext("2d")
+
+canvas.width=window.innerWidth
+canvas.height=window.innerHeight
+
+let particles=[]
+
+for(let i=0;i<80;i++){
+particles.push({
+x:Math.random()*canvas.width,
+y:Math.random()*canvas.height,
+r:Math.random()*2,
+v:Math.random()*0.5
+})
+}
+
+function drawParticles(){
+
+ctx.clearRect(0,0,canvas.width,canvas.height)
+
+particles.forEach(p=>{
+
+ctx.beginPath()
+ctx.arc(p.x,p.y,p.r,0,Math.PI*2)
+ctx.fillStyle="rgba(255,255,255,0.3)"
+ctx.fill()
+
+p.y+=p.v
+
+if(p.y>canvas.height)p.y=0
+
+})
+
+requestAnimationFrame(drawParticles)
+
+}
+
+drawParticles()
 
 </script>
 
