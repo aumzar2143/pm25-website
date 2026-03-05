@@ -155,6 +155,7 @@ let chart
 let map
 let markers=[]
 let userDistrict=null
+let userMarker=null
 
 
 const districts={
@@ -176,7 +177,6 @@ const districts={
 }
 
 
-
 function aqiColor(pm){
 
 if(pm<=25) return "#2ecc71"
@@ -186,7 +186,6 @@ if(pm<=150) return "#e74c3c"
 return "#ff0000"
 
 }
-
 
 
 function advice(pm){
@@ -200,7 +199,6 @@ return "🚨 อันตรายมาก"
 }
 
 
-
 function healthAdvice(pm){
 
 if(pm<=25){
@@ -208,11 +206,9 @@ if(pm<=25){
 return `
 
 คุณภาพอากาศดีมาก
-
-• สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ
+• สามารถทำกิจกรรมกลางแจ้งได้
 • เหมาะสำหรับการออกกำลังกาย
-• เด็กและผู้สูงอายุสามารถทำกิจกรรมภายนอกได้
-• เปิดหน้าต่างเพื่อระบายอากาศได้
+• เด็กและผู้สูงอายุทำกิจกรรมภายนอกได้
 
 `
 
@@ -223,11 +219,8 @@ if(pm<=50){
 return `
 
 คุณภาพอากาศปานกลาง
-
 • บุคคลทั่วไปทำกิจกรรมกลางแจ้งได้
 • ผู้ป่วยโรคหอบหืดควรระวัง
-• หากมีอาการไอควรลดกิจกรรมกลางแจ้ง
-• พกหน้ากากอนามัยไว้
 
 `
 
@@ -238,11 +231,8 @@ if(pm<=100){
 return `
 
 เริ่มมีผลกระทบต่อสุขภาพ
-
-• สวมหน้ากาก N95 เมื่อออกนอกบ้าน
-• ลดเวลาทำกิจกรรมกลางแจ้ง
-• หลีกเลี่ยงกิจกรรมหนัก
-• กลุ่มเสี่ยงควรอยู่ในอาคาร
+• สวมหน้ากาก N95
+• ลดกิจกรรมกลางแจ้ง
 
 `
 
@@ -253,10 +243,7 @@ if(pm<=150){
 return `
 
 มีผลกระทบต่อสุขภาพ
-
 • หลีกเลี่ยงกิจกรรมกลางแจ้ง
-• สวมหน้ากาก N95
-• ปิดประตูหน้าต่างบ้าน
 • ใช้เครื่องฟอกอากาศ
 
 `
@@ -265,18 +252,13 @@ return `
 
 return `
 
-อันตรายมากต่อสุขภาพ
-
-• หลีกเลี่ยงการออกจากบ้าน
-• สวมหน้ากาก N95 หากจำเป็นต้องออก
-• เด็ก ผู้สูงอายุ และผู้ป่วยควรอยู่ในอาคาร
-• ใช้เครื่องฟอกอากาศ
-• หากมีอาการหายใจลำบากให้พบแพทย์
+อันตรายมาก
+• หลีกเลี่ยงออกจากบ้าน
+• สวมหน้ากาก N95
 
 `
 
 }
-
 
 
 function pmToAQI(pm){
@@ -284,7 +266,6 @@ function pmToAQI(pm){
 return Math.round(pm*4)
 
 }
-
 
 
 async function fetchPM(lat,lon){
@@ -300,7 +281,6 @@ return pm
 }
 
 
-
 function initMap(){
 
 map=L.map('map').setView([18.3,99.5],9)
@@ -308,7 +288,6 @@ map=L.map('map').setView([18.3,99.5],9)
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
 
 }
-
 
 
 async function loadAll(){
@@ -328,12 +307,9 @@ results.push({name,pm,lat,lon})
 
 }
 
-
 results.sort((a,b)=>b.pm-a.pm)
 
-
 let html=""
-
 
 results.forEach((d,i)=>{
 
@@ -345,25 +321,19 @@ html+=`<div class="${cls}">
 ${i+1}. ${d.name} - ${d.pm} µg/m³
 </div>`
 
-
 let circle=L.circle([d.lat,d.lon],{
-
 radius:7000,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
 fillOpacity:0.5
-
 }).addTo(map)
-
 .bindPopup(d.name+"<br>"+d.pm+" µg/m³")
 
 markers.push(circle)
 
 })
 
-
 document.getElementById("ranking").innerHTML=html
-
 
 let values=results.map(r=>r.pm)
 
@@ -375,13 +345,10 @@ let max=Math.max(...values)
 
 let min=Math.min(...values)
 
-
 document.getElementById("pmValue").innerText=mainPM+" µg/m³"
 document.getElementById("statusText").innerText=advice(mainPM)
 document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
-
 document.getElementById("aqiText").innerText="AQI ประมาณ: "+pmToAQI(mainPM)
-
 document.getElementById("avgText").innerText="ค่าเฉลี่ยจังหวัด: "+avg.toFixed(2)
 document.getElementById("maxText").innerText="ค่าสูงสุด: "+max
 document.getElementById("minText").innerText="ค่าต่ำสุด: "+min
@@ -391,18 +358,14 @@ loadChart(values)
 }
 
 
-
 function loadChart(data){
 
 if(chart) chart.destroy()
 
 chart=new Chart(
-
 document.getElementById("chart"),
-
 {
 type:"bar",
-
 data:{
 labels:Object.keys(districts),
 datasets:[
@@ -412,13 +375,10 @@ data:data
 }
 ]
 }
-
 }
-
 )
 
 }
-
 
 
 function useGPS(){
@@ -433,6 +393,22 @@ let lon=pos.coords.longitude
 document.getElementById("locationText").innerText=
 "📍 "+lat.toFixed(4)+","+lon.toFixed(4)
 
+if(userMarker){
+map.removeLayer(userMarker)
+}
+
+userMarker=L.circleMarker([lat,lon],{
+radius:10,
+color:"#0984e3",
+fillColor:"#74b9ff",
+fillOpacity:1,
+weight:3
+}).addTo(map)
+.bindPopup("📍 ตำแหน่งของคุณ")
+.openPopup()
+
+map.setView([lat,lon],12)
+
 userDistrict=findClosest(lat,lon)
 
 loadAll()
@@ -442,7 +418,6 @@ loadAll()
 )
 
 }
-
 
 
 function findClosest(lat,lon){
@@ -470,7 +445,6 @@ return closest
 }
 
 
-
 function exportCSV(){
 
 let csv="District,PM2.5\n"
@@ -494,11 +468,8 @@ a.click()
 }
 
 
-
 initMap()
-
 loadAll()
-
 setInterval(loadAll,300000)
 
 </script>
