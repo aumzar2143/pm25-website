@@ -4,12 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>PM2.5 Lampang Research Platform</title>
+<title>PM2.5 Lampang Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
 <style>
 
@@ -26,9 +28,7 @@ margin:auto;
 padding:20px;
 }
 
-h1{
-text-align:center;
-}
+h1{text-align:center}
 
 .grid{
 display:grid;
@@ -40,7 +40,7 @@ gap:20px;
 background:#1e293b;
 padding:20px;
 border-radius:15px;
-box-shadow:0 10px 30px rgba(0,0,0,0.4);
+box-shadow:0 10px 25px rgba(0,0,0,0.4);
 }
 
 button{
@@ -55,7 +55,7 @@ margin:5px;
 .gps{background:#2962ff;color:white}
 
 #map{
-height:400px;
+height:420px;
 border-radius:10px;
 }
 
@@ -64,10 +64,6 @@ background:#0f172a;
 margin:5px;
 padding:10px;
 border-radius:8px;
-}
-
-.highlight{
-border:2px solid white;
 }
 
 @media(max-width:900px){
@@ -85,27 +81,31 @@ grid-template-columns:1fr;
 
 <div class="container">
 
-<h1>🌫 PM2.5 จังหวัดลำปาง Research Dashboard</h1>
+<h1>🌫 PM2.5 จังหวัดลำปาง</h1>
 
 <div class="card">
 
 <h2 id="pmValue">--</h2>
 <p id="statusText">กำลังโหลด...</p>
-<p id="forecastText"></p>
 
 <button class="refresh" onclick="loadAll()">รีเฟรช</button>
 <button class="gps" onclick="useGPS()">ใช้ GPS</button>
 
 </div>
 
-
 <div class="card">
 
-<h3>🗺 แผนที่ PM2.5</h3>
-<div id="map"></div>
+<h3>🩺 คำแนะนำการป้องกันฝุ่น (กรมอนามัย)</h3>
+<p id="healthAdvice">กำลังโหลด...</p>
 
 </div>
 
+<div class="card">
+
+<h3>🗺 แผนที่ Heatmap ฝุ่น</h3>
+<div id="map"></div>
+
+</div>
 
 <div class="grid">
 
@@ -125,15 +125,6 @@ grid-template-columns:1fr;
 
 </div>
 
-
-<div class="card">
-
-<h3>⏱ PM2.5 ย้อนหลัง 24 ชั่วโมง</h3>
-<canvas id="historyChart"></canvas>
-
-</div>
-
-
 <div class="card">
 
 <h3>🏆 อันดับอำเภอ</h3>
@@ -150,12 +141,11 @@ const token="05dc64914ef2d1b7c4d2678a15450338e660ea53"
 
 let lineChart
 let barChart
-let historyChart
+let heatLayer
 
 let map=L.map('map').setView([18.3,99.5],9)
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
-
 
 const districts={
 
@@ -175,6 +165,77 @@ const districts={
 
 }
 
+function advice(pm){
+
+if(pm<=25) return "🟢 อากาศดี"
+
+if(pm<=50) return "🟡 เริ่มมีผลกระทบ"
+
+if(pm<=100) return "🟠 มีผลต่อสุขภาพ"
+
+if(pm<=150) return "🔴 เริ่มอันตราย"
+
+return "🟣 อันตรายมาก"
+
+}
+
+function healthAdvice(pm){
+
+if(pm<=25){
+
+return `
+อากาศอยู่ในเกณฑ์ดี
+
+• สามารถทำกิจกรรมกลางแจ้งได้
+• เปิดบ้านระบายอากาศได้
+`
+
+}
+
+if(pm<=50){
+
+return `
+เริ่มมีผลกระทบต่อสุขภาพ
+
+• กลุ่มเสี่ยงควรระวัง
+• หากออกนอกบ้านควรสวมหน้ากาก
+`
+
+}
+
+if(pm<=100){
+
+return `
+มีผลกระทบต่อสุขภาพ
+
+• สวมหน้ากาก N95
+• ลดกิจกรรมกลางแจ้ง
+• กลุ่มเสี่ยงควรหลีกเลี่ยงฝุ่น
+`
+
+}
+
+if(pm<=150){
+
+return `
+เริ่มอันตรายต่อสุขภาพ
+
+• สวมหน้ากาก N95 ทุกครั้ง
+• หลีกเลี่ยงกิจกรรมกลางแจ้ง
+• ปิดประตูหน้าต่างบ้าน
+`
+
+}
+
+return `
+อันตรายต่อสุขภาพ
+
+• หลีกเลี่ยงออกจากบ้าน
+• ใช้เครื่องฟอกอากาศ
+• กลุ่มเสี่ยงควรอยู่ในอาคาร
+`
+
+}
 
 async function fetchPM(lat,lon){
 
@@ -185,10 +246,10 @@ return data.data.iaqi.pm25?data.data.iaqi.pm25.v:0
 
 }
 
-
 async function loadAll(){
 
 let results=[]
+let heatData=[]
 
 for(const name in districts){
 
@@ -198,8 +259,9 @@ let pm=await fetchPM(lat,lon)
 
 results.push({name,pm,lat,lon})
 
-}
+heatData.push([lat,lon,pm/150])
 
+}
 
 results.sort((a,b)=>b.pm-a.pm)
 
@@ -209,35 +271,24 @@ results.forEach((d,i)=>{
 
 html+=`<div class="rank">${i+1}. ${d.name} - ${d.pm} µg/m³</div>`
 
-L.circle([d.lat,d.lon],{
-
-radius:8000,
-color:"red"
-
-}).addTo(map)
-
 })
-
 
 document.getElementById("ranking").innerHTML=html
 
 let labels=results.map(r=>r.name)
 let values=results.map(r=>r.pm)
 
-let pmMain=results[0].pm
+let mainPM=results[0].pm
 
-document.getElementById("pmValue").innerText=pmMain+" µg/m³"
-
+document.getElementById("pmValue").innerText=mainPM+" µg/m³"
+document.getElementById("statusText").innerText=advice(mainPM)
+document.getElementById("healthAdvice").innerText=healthAdvice(mainPM)
 
 createCharts(labels,values)
 
-createHistory(pmMain)
-
-forecastPM(pmMain)
+createHeatmap(heatData)
 
 }
-
-
 
 function createCharts(labels,data){
 
@@ -245,9 +296,7 @@ if(lineChart) lineChart.destroy()
 if(barChart) barChart.destroy()
 
 lineChart=new Chart(
-
 document.getElementById("lineChart"),
-
 {
 type:"line",
 data:{
@@ -255,13 +304,10 @@ labels:labels,
 datasets:[{label:"PM2.5",data:data}]
 }
 }
-
 )
 
 barChart=new Chart(
-
 document.getElementById("barChart"),
-
 {
 type:"bar",
 data:{
@@ -269,58 +315,20 @@ labels:labels,
 datasets:[{label:"PM2.5",data:data}]
 }
 }
-
 )
 
 }
 
+function createHeatmap(data){
 
+if(heatLayer) map.removeLayer(heatLayer)
 
-function createHistory(base){
-
-let hours=[]
-let values=[]
-
-for(let i=23;i>=0;i--){
-
-hours.push(i+"h")
-
-values.push(base+(Math.random()*20-10))
+heatLayer=L.heatLayer(data,{
+radius:35,
+blur:25
+}).addTo(map)
 
 }
-
-
-if(historyChart) historyChart.destroy()
-
-historyChart=new Chart(
-
-document.getElementById("historyChart"),
-
-{
-type:"line",
-data:{
-labels:hours,
-datasets:[{label:"PM2.5 history",data:values}]
-}
-}
-
-)
-
-}
-
-
-
-function forecastPM(current){
-
-let forecast=current+(Math.random()*15-5)
-
-document.getElementById("forecastText").innerText=
-
-"🧠 AI คาดการณ์ 6 ชั่วโมง: "+forecast.toFixed(0)+" µg/m³"
-
-}
-
-
 
 function useGPS(){
 
@@ -341,9 +349,9 @@ L.marker([lat,lon]).addTo(map)
 
 }
 
-
-
 loadAll()
+
+setInterval(loadAll,300000)
 
 </script>
 
