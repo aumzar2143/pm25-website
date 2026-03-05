@@ -82,7 +82,7 @@ border-radius:10px;
 }
 
 .highlight{
-border:2px solid #0984e3;
+border:3px solid #0984e3;
 background:#eaf4ff;
 }
 
@@ -218,6 +218,29 @@ const districts={
 "แม่ทะ":[18.1000,99.5667]
 }
 
+function findDistrict(lat,lon){
+
+let minDist=999
+let closest=null
+
+for(const name in districts){
+
+let [dlat,dlon]=districts[name]
+
+let dist=Math.sqrt(
+Math.pow(lat-dlat,2)+Math.pow(lon-dlon,2)
+)
+
+if(dist<minDist){
+minDist=dist
+closest=name
+}
+
+}
+
+return closest
+}
+
 function aqiColor(pm){
 if(pm<=25)return"#2ecc71"
 if(pm<=50)return"#f1c40f"
@@ -332,8 +355,13 @@ results.push({name,pm,lat,lon})
 results.sort((a,b)=>b.pm-a.pm)
 
 let rankingHTML=""
+let chartLabels=[]
+let chartData=[]
 
 results.forEach((d,i)=>{
+
+chartLabels.push(d.name)
+chartData.push(d.pm)
 
 let cls="rank"
 if(d.name===userDistrict)cls+=" highlight"
@@ -344,7 +372,8 @@ let circle=L.circle([d.lat,d.lon],{
 radius:7000,
 color:aqiColor(d.pm),
 fillColor:aqiColor(d.pm),
-fillOpacity:0.6
+fillOpacity:0.6,
+weight:d.name===userDistrict?5:2
 }).addTo(map)
 .bindPopup(`<b>${d.name}</b><br>PM2.5 ${d.pm}`)
 
@@ -368,11 +397,11 @@ if(mainPM>100){
 document.getElementById("alertBox").style.display="block"
 }
 
-loadChart(results.map(r=>r.pm))
+loadChart(chartLabels,chartData)
 
 }
 
-function loadChart(data){
+function loadChart(labels,data){
 
 if(chart)chart.destroy()
 
@@ -381,7 +410,7 @@ document.getElementById("chart"),
 {
 type:"bar",
 data:{
-labels:Object.keys(districts),
+labels:labels,
 datasets:[{
 label:"PM2.5",
 data:data
@@ -399,6 +428,8 @@ navigator.geolocation.getCurrentPosition(async pos=>{
 let lat=pos.coords.latitude
 let lon=pos.coords.longitude
 let acc=pos.coords.accuracy
+
+userDistrict=findDistrict(lat,lon)
 
 if(userMarker)map.removeLayer(userMarker)
 if(accuracyCircle)map.removeLayer(accuracyCircle)
@@ -420,6 +451,8 @@ fillOpacity:0.3
 }).addTo(map)
 
 map.setView([lat,lon],13)
+
+loadAll()
 
 const geo=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
 const data=await geo.json()
