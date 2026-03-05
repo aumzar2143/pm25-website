@@ -300,10 +300,20 @@ return html
 
 async function fetchPM(lat,lon){
 
+try{
+
 const res=await fetch(`https://api.waqi.info/feed/geo:${lat};${lon}/?token=${token}`)
 const data=await res.json()
 
-return data.data.iaqi.pm25 ? data.data.iaqi.pm25.v : 0
+if(data.status==="ok" && data.data && data.data.iaqi && data.data.iaqi.pm25){
+return data.data.iaqi.pm25.v
+}
+
+return 0
+
+}catch(e){
+return 0
+}
 
 }
 
@@ -341,16 +351,19 @@ markers.forEach(m=>map.removeLayer(m))
 markers=[]
 
 let results=[]
+let promises=[]
 
 for(const name in districts){
 
 let [lat,lon]=districts[name]
 
-let pm=await fetchPM(lat,lon)
-
-results.push({name,pm,lat,lon})
+promises.push(
+fetchPM(lat,lon).then(pm=>({name,pm,lat,lon}))
+)
 
 }
+
+results=await Promise.all(promises)
 
 results.sort((a,b)=>b.pm-a.pm)
 
